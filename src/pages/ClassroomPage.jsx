@@ -288,7 +288,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isAdmin]);
 
-  // Combined Active Stream (Screen Video + Local Audio if Screen Share, or Local Stream)
+  // Dynamic active stream combining Screen Video + Local Audio if Screen Share, or Local Stream
   const getActiveStream = () => {
     if (sharing && screenStreamRef.current) {
       const tracks = [screenStreamRef.current.getVideoTracks()[0]];
@@ -298,6 +298,28 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
       return new MediaStream(tracks);
     }
     return localStreamRef.current;
+  };
+
+  // Replace video track across all active WebRTC peer connections seamlessly without breaking connections
+  const updatePeersVideoTrack = async (newVideoTrack) => {
+    for (const [targetSocketId, pc] of Object.entries(peerConnectionsRef.current)) {
+      try {
+        const senders = pc.getSenders();
+        const videoSender = senders.find((s) => s.track && s.track.kind === "video")
+                         || senders.find((s) => !s.track || s.track.kind === "video");
+
+        if (videoSender) {
+          await videoSender.replaceTrack(newVideoTrack || null);
+        } else if (newVideoTrack) {
+          pc.addTrack(newVideoTrack, localStreamRef.current || new MediaStream([newVideoTrack]));
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socketRef.current?.emit('webrtc-offer', { targetSocketId, offer });
+        }
+      } catch (err) {
+        console.warn(`Error replacing video track for ${targetSocketId}:`, err);
+      }
+    }
   };
 
   // WebRTC Peer Connection Creator
@@ -346,24 +368,6 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     return pc;
   };
 
-  // Broadcast WebRTC SDP renegotiation when new video/audio tracks are toggled
-  const broadcastNewMediaStream = async (stream) => {
-    if (!stream) return;
-    for (const [targetSocketId, pc] of Object.entries(peerConnectionsRef.current)) {
-      try {
-        const senders = pc.getSenders();
-        senders.forEach((sender) => pc.removeSender(sender));
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socketRef.current?.emit('webrtc-offer', { targetSocketId, offer });
-      } catch (err) {
-        console.warn(`WebRTC renegotiation error with ${targetSocketId}:`, err);
-      }
-    }
-  };
-
   // Socket.IO & WebRTC Setup
   useEffect(() => {
     const SOCKET_SERVER_URL = window.location.hostname === 'localhost'
@@ -393,7 +397,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
       setParticipants(list);
     });
 
-    socket.on('screen-share-broadcast', ({ isSharing, hostSocketId }) => {
+    socket.on('screen-share-broadcast', ({ isSharing }) => {
       if (!isAdmin) {
         setSharing(isSharing);
       }
@@ -554,14 +558,22 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: mic,
         });
-        localStreamRef.current = mediaStream;
-        setLocalStream(mediaStream);
+
+        const newVideoTrack = mediaStream.getVideoTracks()[0];
+        if (localStreamRef.current) {
+          localStreamRef.current.getVideoTracks().forEach(t => t.stop());
+          localStreamRef.current.addTrack(newVideoTrack);
+        } else {
+          localStreamRef.current = mediaStream;
+          setLocalStream(mediaStream);
+        }
+
         setCam(true);
         socketRef.current?.emit('toggle-media', { mic, cam: true, hand: handRaised });
 
-        await broadcastNewMediaStream(mediaStream);
+        await updatePeersVideoTrack(newVideoTrack);
       } catch (err) {
-        console.error("Camera access denied or unavailable:", err);
+        console.error("Camera access error:", err);
         setCam(false);
         alert("Camera could not be accessed. Please allow camera permissions in browser settings.");
       }
@@ -571,6 +583,8 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
       }
       setCam(false);
       socketRef.current?.emit('toggle-media', { mic, cam: false, hand: handRaised });
+
+      await updatePeersVideoTrack(null);
     }
   };
 
@@ -592,7 +606,6 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           localStreamRef.current = audioStream;
           setLocalStream(audioStream);
         }
-        await broadcastNewMediaStream(audioStream);
       } catch (e) {
         console.warn("Microphone access error:", e);
       }
@@ -619,12 +632,12 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
         setScreenStream(displayStream);
         setSharing(true);
 
-        displayStream.getVideoTracks()[0].onended = () => {
+        const screenVideoTrack = displayStream.getVideoTracks()[0];
+        screenVideoTrack.onended = () => {
           stopScreenSharing();
         };
 
-        const activeStr = getActiveStream();
-        await broadcastNewMediaStream(activeStr);
+        await updatePeersVideoTrack(screenVideoTrack);
 
         socketRef.current?.emit('screen-share-state', { isSharing: true });
         socketRef.current?.emit('toggle-media', { mic, cam, hand: handRaised, sharing: true });
@@ -636,19 +649,19 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     }
   };
 
-  const stopScreenSharing = () => {
+  const stopScreenSharing = async () => {
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
     }
     setScreenStream(null);
     setSharing(false);
+
+    const activeCamTrack = (cam && localStreamRef.current) ? localStreamRef.current.getVideoTracks()[0] : null;
+    await updatePeersVideoTrack(activeCamTrack);
+
     socketRef.current?.emit('screen-share-state', { isSharing: false });
     socketRef.current?.emit('toggle-media', { mic, cam, hand: handRaised, sharing: false });
-
-    if (localStreamRef.current) {
-      broadcastNewMediaStream(localStreamRef.current);
-    }
   };
 
   const handleToggleHand = () => {
