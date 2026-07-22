@@ -160,7 +160,7 @@ function ControlButton({ icon: Icon, active, danger, label, onClick, badge }) {
     <button
       onClick={onClick}
       title={label}
-      className={`relative w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all duration-200 shrink-0
+      className={`relative w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all duration-200 shrink-0
         ${danger ? "bg-[#E5484D] hover:bg-[#d13d42]" : active ? "text-white" : "bg-white/5 hover:bg-white/10 text-[#EEF0F4]"}
       `}
       style={active && !danger ? { background: AMBER, color: "#141822" } : undefined}
@@ -456,7 +456,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     if (!cam) {
       try {
         const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: { facingMode: "user" },
           audio: mic,
         });
         localStreamRef.current = mediaStream;
@@ -469,6 +469,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
         });
       } catch (err) {
         console.error("Camera access denied or unavailable:", err);
+        setCam(false);
         alert("Camera could not be accessed. Please allow camera permissions in browser settings.");
       }
     } else {
@@ -557,7 +558,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
   const handleToggleHand = () => {
     const newHand = !handRaised;
     setHandRaised(newHand);
-    socketRef.current?.emit('toggle-media', { mic, cam: newHand });
+    socketRef.current?.emit('toggle-media', { mic, cam, hand: newHand });
 
     if (newHand && !isAdmin) {
       socketRef.current?.emit('request-mic');
@@ -694,7 +695,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
       {isAdmin && joinRequests.length > 0 && (
         <div className="absolute top-14 sm:top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-amber-500 text-zinc-950 font-semibold text-xs shadow-2xl backdrop-blur-md animate-bounce border-2 border-amber-300 max-w-[92vw]">
           <UserCheck size={18} className="shrink-0" />
-          <span className="truncate"><strong>{joinRequests[0].name}</strong> wants to join</span>
+          <span className="truncate"><strong>{joinRequests[0].name}</strong> wants to join ({joinRequests.length} pending)</span>
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => handleApproveJoin(joinRequests[0].socketId, true, joinRequests[0].name, joinRequests[0].color)}
@@ -991,6 +992,44 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
             </button>
           </div>
 
+          {/* Pending Admission Requests Section (Admin view) */}
+          {isAdmin && joinRequests.length > 0 && (
+            <div className="p-3 border-b border-amber-500/40 bg-amber-500/15">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-amber-400">Pending Join Requests ({joinRequests.length})</span>
+                <button
+                  onClick={() => {
+                    joinRequests.forEach(req => handleApproveJoin(req.socketId, true, req.name, req.color));
+                  }}
+                  className="text-[10px] px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                >
+                  Admit All
+                </button>
+              </div>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                {joinRequests.map((req) => (
+                  <div key={req.socketId} className="flex items-center justify-between py-1 text-xs bg-black/30 px-2 rounded-lg">
+                    <span className="truncate max-w-[120px] font-medium">{req.name}</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleApproveJoin(req.socketId, true, req.name, req.color)}
+                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px]"
+                      >
+                        Admit
+                      </button>
+                      <button
+                        onClick={() => handleApproveJoin(req.socketId, false, req.name, req.color)}
+                        className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white font-semibold text-[11px]"
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Pending Mic Requests Section (Admin view) */}
           {isAdmin && micRequests.length > 0 && (
             <div className="p-3 border-b border-amber-500/30 bg-amber-500/10">
@@ -1059,7 +1098,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           {isAdmin && <ControlButton icon={sharing ? ScreenShareOff : ScreenShare} active={sharing} label="Share screen" onClick={handleToggleScreenShare} />}
           {isAdmin && <ControlButton icon={Circle} active={recording} label="Record" onClick={handleToggleRecording} />}
           <div className={`w-px h-5 sm:h-6 mx-0.5 ${isDark ? "bg-white/10" : "bg-black/10"}`} />
-          <ControlButton icon={Users} active={participantsOpen} label="Participants" badge={participants.length} onClick={() => { setParticipantsOpen((v) => !v); setChatOpen(false); }} />
+          <ControlButton icon={Users} active={participantsOpen} label="Participants" badge={participants.length + joinRequests.length} onClick={() => { setParticipantsOpen((v) => !v); setChatOpen(false); }} />
           <ControlButton icon={MessageSquare} active={chatOpen} label="Chat" badge={!chatOpen ? messages.length : null} onClick={() => { setChatOpen((v) => !v); setParticipantsOpen(false); }} />
           <ControlButton icon={Hand} active={handRaised} label="Raise hand" onClick={handleToggleHand} />
           <div className={`w-px h-5 sm:h-6 mx-0.5 ${isDark ? "bg-white/10" : "bg-black/10"}`} />
