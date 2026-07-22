@@ -5,7 +5,7 @@ import {
   Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, Circle,
   Users, MessageSquare, Hand, PhoneOff, Search, Sun, Moon, Monitor,
   X, Send, Smile, Radio, Wifi, Pin, ShieldCheck, VolumeX, UserX,
-  PlayCircle, StopCircle, Upload, MonitorUp, StopCircle as StopIcon
+  PlayCircle, StopCircle, Upload, MonitorUp, Copy, Check
 } from "lucide-react";
 
 /* ---------------------------------------------------------------
@@ -93,7 +93,7 @@ function StatusDot({ ok }) {
   );
 }
 
-function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStream, localVideoRef }) {
+function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStream }) {
   const showVideo = p.cam && isSelf && localStream;
 
   return (
@@ -107,7 +107,7 @@ function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStrea
       {showVideo ? (
         <video
           ref={(el) => {
-            if (el && localStream) {
+            if (el && el.srcObject !== localStream) {
               el.srcObject = localStream;
             }
           }}
@@ -199,11 +199,16 @@ export default function ClassroomPage({ user, onLeave }) {
   // Real Media Stream Refs & State
   const localStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
-  const localVideoRef = useRef(null);
-  const screenVideoRef = useRef(null);
 
   const [localStream, setLocalStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
+
+  // Copy Link State
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // MediaRecorder for Recording
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
 
   // Media states
   const [mic, setMic] = useState(isAdmin);
@@ -322,6 +327,14 @@ export default function ClassroomPage({ user, onLeave }) {
     onLeave();
   };
 
+  // Copy Class Link for Students
+  const handleCopyLink = () => {
+    const inviteUrl = window.location.origin + '/class';
+    navigator.clipboard.writeText(inviteUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
   // Toggle Camera
   const handleToggleCam = async () => {
     if (!cam) {
@@ -391,7 +404,6 @@ export default function ClassroomPage({ user, onLeave }) {
         setScreenStream(displayStream);
         setSharing(true);
 
-        // When user stops sharing via browser native floating bar
         displayStream.getVideoTracks()[0].onended = () => {
           stopScreenSharing();
         };
@@ -432,6 +444,67 @@ export default function ClassroomPage({ user, onLeave }) {
     setDraft("");
   };
 
+  // Recording Toggle Handler (Browser MediaRecorder)
+  const handleToggleRecording = async () => {
+    const token = localStorage.getItem('adminToken');
+    if (!recording) {
+      // Start Recording
+      const recordStream = screenStreamRef.current || localStreamRef.current;
+      if (!recordStream) {
+        alert("Please turn on your Camera or Screen Share first to start recording lecture video!");
+        return;
+      }
+
+      try {
+        recordedChunksRef.current = [];
+        const recorder = new MediaRecorder(recordStream, { mimeType: 'video/webm;codecs=vp9,opus' });
+        
+        recorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            recordedChunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.onstop = () => {
+          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = `Lecture-Class-Recording-${Date.now()}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+          }, 100);
+        };
+
+        recorder.start(1000);
+        mediaRecorderRef.current = recorder;
+        setRecording(true);
+
+        await fetch('/api/class/recording/start', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (err) {
+        console.error("Recording error:", err);
+      }
+    } else {
+      // Stop Recording & Download File
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      setRecording(false);
+
+      await fetch('/api/class/recording/stop', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+  };
+
   // Admin Control Handlers
   const handleStartClass = async () => {
     const token = localStorage.getItem('adminToken');
@@ -445,21 +518,6 @@ export default function ClassroomPage({ user, onLeave }) {
     if (window.confirm("Are you sure you want to end the class for everyone?")) {
       const token = localStorage.getItem('adminToken');
       await fetch('/api/class/end', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    }
-  };
-
-  const handleToggleRecording = async () => {
-    const token = localStorage.getItem('adminToken');
-    if (!recording) {
-      await fetch('/api/class/recording/start', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } else {
-      await fetch('/api/class/recording/stop', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -518,8 +576,21 @@ export default function ClassroomPage({ user, onLeave }) {
           )}
         </div>
 
-        {/* Admin Dashboard Controls Bar & Theme Toggles */}
+        {/* Copy Invite Link & Theme Toggles */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleCopyLink}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all ${
+              copiedLink
+                ? "bg-emerald-600 text-white border-emerald-500 shadow-md"
+                : "border-[#262C3A] hover:bg-white/10 text-[#EEF0F4]"
+            }`}
+            title="Copy Student Join Link"
+          >
+            {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+            <span>{copiedLink ? "Link Copied!" : "Copy Student Link"}</span>
+          </button>
+
           {isAdmin && (
             <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full border ${t.border} bg-white/5`}>
               {!classStatus.isLive ? (
@@ -587,8 +658,7 @@ export default function ClassroomPage({ user, onLeave }) {
               <div className={`relative flex-1 rounded-2xl border ${t.border} overflow-hidden bg-black flex items-center justify-center`}>
                 <video
                   ref={(el) => {
-                    screenVideoRef.current = el;
-                    if (el && screenStream) {
+                    if (el && el.srcObject !== screenStream) {
                       el.srcObject = screenStream;
                     }
                   }}
@@ -615,7 +685,7 @@ export default function ClassroomPage({ user, onLeave }) {
                     style={{ borderColor: AMBER, aspectRatio: "16/9" }}>
                     <video
                       ref={(el) => {
-                        if (el && localStream) {
+                        if (el && el.srcObject !== localStream) {
                           el.srcObject = localStream;
                         }
                       }}
@@ -641,7 +711,6 @@ export default function ClassroomPage({ user, onLeave }) {
                       compact
                       isSelf={p.socketId === socketRef.current?.id}
                       localStream={localStream}
-                      localVideoRef={localVideoRef}
                       onRemove={isAdmin ? handleRemoveParticipant : null}
                     />
                   </div>
@@ -656,7 +725,7 @@ export default function ClassroomPage({ user, onLeave }) {
                 {cam && isAdmin && localStream ? (
                   <video
                     ref={(el) => {
-                      if (el && localStream) {
+                      if (el && el.srcObject !== localStream) {
                         el.srcObject = localStream;
                       }
                     }}
@@ -701,7 +770,6 @@ export default function ClassroomPage({ user, onLeave }) {
                     t={t}
                     isSelf={p.socketId === socketRef.current?.id}
                     localStream={localStream}
-                    localVideoRef={localVideoRef}
                     onRemove={isAdmin ? handleRemoveParticipant : null}
                   />
                 ))}
