@@ -11,9 +11,17 @@ const SOCKET_SERVER_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:5000'
   : 'https://live-class-meet.onrender.com';
 
+function generateUniqueRoomId() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz';
+  const p1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  const p2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  const p3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  return `${p1}-${p2}-${p3}`;
+}
+
 function StudentJoinWrapper() {
   const { roomId } = useParams();
-  const roomName = roomId || 'class-session-1';
+  const roomName = roomId || 'live-session';
 
   const [user, setUser] = useState(null);
   const [isKnocking, setIsKnocking] = useState(false);
@@ -97,7 +105,7 @@ function StudentJoinWrapper() {
           <div>
             <h2 className="text-lg font-bold text-white">Waiting for Host Approval...</h2>
             <p className="text-xs text-[#8B93A7] mt-1">
-              Hi <strong>{knockingName}</strong>, your request has been sent to the Teacher. Please wait while they admit you to the live class.
+              Hi <strong>{knockingName}</strong>, your request for session <code>{roomName}</code> has been sent to the Teacher. Please wait while they admit you to the live class.
             </p>
           </div>
 
@@ -126,7 +134,7 @@ function StudentJoinWrapper() {
 
 function MainClassroomWrapper() {
   const { roomId } = useParams();
-  const targetRoom = roomId || 'class-session-1';
+  const targetRoom = roomId || localStorage.getItem('activeRoomId') || 'live-session';
   const [classStatus, setClassStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -168,6 +176,7 @@ function MainClassroomWrapper() {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('userRole');
     localStorage.removeItem('userName');
+    localStorage.removeItem('activeRoomId');
   };
 
   if (user && user.role === 'admin') {
@@ -197,17 +206,19 @@ function MainClassroomWrapper() {
 }
 
 export default function App() {
+  const defaultRoom = localStorage.getItem('activeRoomId') || generateUniqueRoomId();
+
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/admin" element={<AdminLogin />} />
         <Route path="/admin-login" element={<AdminLogin />} />
         <Route path="/join/:roomId" element={<StudentJoinWrapper />} />
-        <Route path="/join" element={<StudentJoinWrapper />} />
+        <Route path="/join" element={<Navigate to={`/join/${defaultRoom}`} replace />} />
         <Route path="/room/:roomId" element={<MainClassroomWrapper />} />
-        <Route path="/class" element={<MainClassroomWrapper />} />
-        <Route path="/" element={<Navigate to="/join" replace />} />
-        <Route path="*" element={<Navigate to="/join" replace />} />
+        <Route path="/class" element={<Navigate to={`/room/${defaultRoom}`} replace />} />
+        <Route path="/" element={<Navigate to={`/join/${defaultRoom}`} replace />} />
+        <Route path="*" element={<Navigate to={`/join/${defaultRoom}`} replace />} />
       </Routes>
     </BrowserRouter>
   );

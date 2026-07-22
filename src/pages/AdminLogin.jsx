@@ -13,6 +13,14 @@ const DARK = {
 };
 const AMBER = "#E8A33D";
 
+function generateUniqueRoomId() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz';
+  const p1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  const p2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  const p3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  return `${p1}-${p2}-${p3}`;
+}
+
 export default function AdminLogin() {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('adminpassword123');
@@ -23,8 +31,9 @@ export default function AdminLogin() {
   React.useEffect(() => {
     const token = localStorage.getItem('adminToken');
     const role = localStorage.getItem('userRole');
+    const existingRoom = localStorage.getItem('activeRoomId') || generateUniqueRoomId();
     if (token && role === 'admin') {
-      navigate('/class');
+      navigate(`/room/${existingRoom}`);
     }
   }, [navigate]);
 
@@ -51,12 +60,15 @@ export default function AdminLogin() {
         throw new Error(data.message || 'Authentication failed.');
       }
 
-      // Save token & admin credentials securely
+      // Generate dynamic unique Google Meet style Room ID for this new class session
+      const uniqueRoomId = generateUniqueRoomId();
+
       localStorage.setItem('adminToken', data.token);
       localStorage.setItem('userRole', 'admin');
       localStorage.setItem('userName', data.admin.username);
+      localStorage.setItem('activeRoomId', uniqueRoomId);
 
-      navigate('/class');
+      navigate(`/room/${uniqueRoomId}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -73,8 +85,8 @@ export default function AdminLogin() {
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-3" style={{ background: `${AMBER}1A`, color: AMBER }}>
             <ShieldCheck size={32} />
           </div>
-          <h2 className="text-xl font-bold tracking-tight">Admin Portal</h2>
-          <p className={`text-xs ${DARK.sub} mt-1`}>Secure Host Authentication for Live Classroom</p>
+          <h2 className="text-xl font-bold tracking-tight">Teacher / Host Portal</h2>
+          <p className={`text-xs ${DARK.sub} mt-1`}>Start a New Session with Unique Meeting Link</p>
         </div>
 
         {error && (
@@ -93,7 +105,7 @@ export default function AdminLogin() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username from .env"
+                placeholder="Enter admin username"
                 className={`w-full bg-transparent outline-none text-sm ${DARK.text} placeholder:${DARK.faint}`}
                 required
               />
@@ -108,7 +120,7 @@ export default function AdminLogin() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password from .env"
+                placeholder="Enter admin password"
                 className={`w-full bg-transparent outline-none text-sm ${DARK.text} placeholder:${DARK.faint}`}
                 required
               />
@@ -121,16 +133,19 @@ export default function AdminLogin() {
             className="w-full py-3 rounded-xl font-semibold text-sm transition-all duration-200 mt-2 shadow-lg"
             style={{ background: AMBER, color: '#141822' }}
           >
-            {loading ? 'Authenticating...' : 'Sign In as Host'}
+            {loading ? 'Generating Unique Class Session...' : 'Start New Class Session'}
           </button>
         </form>
 
         <div className="mt-6 text-center">
           <button
-            onClick={() => navigate('/class')}
+            onClick={() => {
+              const activeRoom = localStorage.getItem('activeRoomId') || generateUniqueRoomId();
+              navigate(`/join/${activeRoom}`);
+            }}
             className={`text-xs ${DARK.sub} hover:underline`}
           >
-            Return to Public Classroom
+            Join as Student via Code
           </button>
         </div>
       </div>
