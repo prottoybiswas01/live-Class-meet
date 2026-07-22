@@ -1,0 +1,4 @@
+[2026-07-22 13:32:16] [WARN]: Failed admin login attempt for username: "admin" from IP: ::1 
+[2026-07-22 13:32:33] [WARN]: Failed admin login attempt for username: "admin" from IP: ::1 
+[2026-07-22 13:34:01] [INFO]: Admin successfully authenticated from IP: ::1 
+[2026-07-22 13:34:08] [INFO]: Admin successfully authenticated from IP: ::1 
