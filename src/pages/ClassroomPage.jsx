@@ -547,7 +547,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
   const handleToggleHand = () => {
     const newHand = !handRaised;
     setHandRaised(newHand);
-    socketRef.current?.emit('toggle-media', { mic, cam, hand: newHand });
+    socketRef.current?.emit('toggle-media', { mic, cam: newHand });
 
     if (newHand && !isAdmin) {
       socketRef.current?.emit('request-mic');
@@ -663,7 +663,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
   // Dynamic Host Participant info
   const hostParticipant = participants.find((p) => p.role === 'admin');
-  const hostDisplayName = hostParticipant ? hostParticipant.name : (isAdmin ? user.name : 'Host Teacher');
+  const hostDisplayName = hostParticipant ? hostParticipant.name : (isAdmin ? user.name : 'Teacher / Host');
 
   return (
     <div className={`w-full h-screen flex flex-col ${t.bg} ${t.text} font-sans overflow-hidden relative`}>
@@ -723,20 +723,22 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           )}
         </div>
 
-        {/* Copy Invite Link & Theme Toggles */}
+        {/* Copy Invite Link & Theme Toggles (Host ONLY sees Copy Link!) */}
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-          <button
-            onClick={handleCopyLink}
-            className={`flex items-center gap-1 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full border text-[11px] sm:text-xs font-semibold transition-all ${
-              copiedLink
-                ? "bg-emerald-600 text-white border-emerald-500 shadow-md"
-                : "border-[#262C3A] hover:bg-white/10 text-[#EEF0F4]"
-            }`}
-            title="Copy Student Join Link"
-          >
-            {copiedLink ? <Check size={13} /> : <Copy size={13} />}
-            <span>{copiedLink ? "Copied!" : "Copy Link"}</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={handleCopyLink}
+              className={`flex items-center gap-1 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full border text-[11px] sm:text-xs font-semibold transition-all ${
+                copiedLink
+                  ? "bg-emerald-600 text-white border-emerald-500 shadow-md"
+                  : "border-[#262C3A] hover:bg-white/10 text-[#EEF0F4]"
+              }`}
+              title="Copy Student Join Link"
+            >
+              {copiedLink ? <Check size={13} /> : <Copy size={13} />}
+              <span>{copiedLink ? "Copied!" : "Copy Link"}</span>
+            </button>
+          )}
 
           {isAdmin && (
             <div className={`flex items-center gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full border ${t.border} bg-white/5`}>
@@ -810,12 +812,14 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                 <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white text-[11px] sm:text-xs">
                   <MonitorUp size={14} color={AMBER} className="animate-pulse" />
                   <span className="font-medium truncate max-w-[120px] sm:max-w-none">Screen Sharing Active</span>
-                  <button
-                    onClick={stopScreenSharing}
-                    className="ml-1 px-2 py-0.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-[10px] font-semibold transition-colors"
-                  >
-                    Stop
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={stopScreenSharing}
+                      className="ml-1 px-2 py-0.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-[10px] font-semibold transition-colors"
+                    >
+                      Stop
+                    </button>
+                  )}
                 </div>
 
                 {/* Host Local Camera PiP */}
@@ -886,7 +890,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                           <ShieldCheck size={18} color={AMBER} className="shrink-0" />
                         </div>
                         <div className={`text-[11px] sm:text-xs ${t.sub} flex items-center gap-1 mt-0.5`}>
-                          <Pin size={11} className="shrink-0" /> Host · Main Stage
+                          <Pin size={11} className="shrink-0" /> Host · Main Classroom Stage
                         </div>
                       </div>
                     </div>
@@ -1042,8 +1046,8 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           style={{ background: isDark ? "rgba(20,24,34,0.92)" : "rgba(255,255,255,0.92)", backdropFilter: "blur(16px)" }}>
           <ControlButton icon={mic ? Mic : MicOff} active={mic} label="Microphone" onClick={handleToggleMic} />
           <ControlButton icon={cam ? Video : VideoOff} active={cam} label="Camera" onClick={handleToggleCam} />
-          <ControlButton icon={sharing ? ScreenShareOff : ScreenShare} active={sharing} label="Share screen" onClick={handleToggleScreenShare} />
-          <ControlButton icon={Circle} active={recording} label="Record" onClick={handleToggleRecording} />
+          {isAdmin && <ControlButton icon={sharing ? ScreenShareOff : ScreenShare} active={sharing} label="Share screen" onClick={handleToggleScreenShare} />}
+          {isAdmin && <ControlButton icon={Circle} active={recording} label="Record" onClick={handleToggleRecording} />}
           <div className={`w-px h-5 sm:h-6 mx-0.5 ${isDark ? "bg-white/10" : "bg-black/10"}`} />
           <ControlButton icon={Users} active={participantsOpen} label="Participants" badge={participants.length} onClick={() => { setParticipantsOpen((v) => !v); setChatOpen(false); }} />
           <ControlButton icon={MessageSquare} active={chatOpen} label="Chat" badge={!chatOpen ? messages.length : null} onClick={() => { setChatOpen((v) => !v); setParticipantsOpen(false); }} />

@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { io } from 'socket.io-client';
+import { Clock, ShieldAlert, XCircle } from 'lucide-react';
 import AdminLogin from './pages/AdminLogin';
 import ClassroomPage from './pages/ClassroomPage';
 import StudentJoinModal from './components/StudentJoinModal';
@@ -8,15 +10,108 @@ import ClassOffline from './components/ClassOffline';
 function StudentJoinWrapper() {
   const { roomId } = useParams();
   const roomName = roomId || 'class-session-1';
+
   const [user, setUser] = useState(null);
+  const [isKnocking, setIsKnocking] = useState(false);
+  const [knockingName, setKnockingName] = useState('');
+  const [denied, setDenied] = useState(false);
+
+  const socketRef = useRef(null);
 
   const handleJoin = (fullName) => {
-    setUser({ name: fullName, role: 'student', roomId: roomName });
+    setKnockingName(fullName);
+    setIsKnocking(true);
+    setDenied(false);
+
+    const socket = io(window.location.origin, {
+      transports: ['websocket', 'polling'],
+    });
+    socketRef.current = socket;
+
+    socket.emit('request-join', {
+      name: fullName,
+      role: 'student',
+      color: '#6C6FEF',
+      roomId: roomName,
+    });
+
+    socket.on('room-joined', (data) => {
+      setIsKnocking(false);
+      setUser({ name: fullName, role: 'student', roomId: roomName });
+    });
+
+    socket.on('join-denied', () => {
+      setIsKnocking(false);
+      setDenied(true);
+      if (socketRef.current) socketRef.current.disconnect();
+    });
+
+    socket.on('error-message', (err) => {
+      setIsKnocking(false);
+      alert(err.message || 'Classroom is currently offline.');
+      if (socketRef.current) socketRef.current.disconnect();
+    });
+  };
+
+  const handleCancelKnock = () => {
+    setIsKnocking(false);
+    if (socketRef.current) socketRef.current.disconnect();
   };
 
   const handleLeave = () => {
     setUser(null);
+    if (socketRef.current) socketRef.current.disconnect();
   };
+
+  if (denied) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-[#0B0E14] text-[#EEF0F4] p-4">
+        <div className="w-full max-w-md bg-[#141822] border border-red-500/30 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
+          <div className="w-12 h-12 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto">
+            <XCircle size={28} />
+          </div>
+          <h2 className="text-lg font-bold">Admission Request Denied</h2>
+          <p className="text-xs text-[#8B93A7]">The host teacher has denied your request to join this session.</p>
+          <button
+            onClick={() => setDenied(false)}
+            className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-all"
+          >
+            Try Requesting Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isKnocking) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-[#0B0E14] text-[#EEF0F4] p-4">
+        <div className="w-full max-w-md bg-[#141822] border border-[#262C3A] rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-2xl relative overflow-hidden">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 text-[#E8A33D] flex items-center justify-center mx-auto animate-pulse">
+            <Clock size={30} />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white">Waiting for Host Approval...</h2>
+            <p className="text-xs text-[#8B93A7] mt-1">
+              Hi <strong>{knockingName}</strong>, your request has been sent to the Teacher. Please wait while they admit you to the live class.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 text-xs text-[#E8A33D] bg-amber-500/10 py-2.5 rounded-xl border border-amber-500/20">
+            <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            <span>Knocking on Classroom Door...</span>
+          </div>
+
+          <button
+            onClick={handleCancelKnock}
+            className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-xs border border-white/10 transition-colors"
+          >
+            Cancel Request
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return <StudentJoinModal roomId={roomName} onJoin={handleJoin} />;
