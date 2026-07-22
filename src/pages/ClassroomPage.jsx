@@ -253,6 +253,17 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     return () => clearInterval(id);
   }, [recording]);
 
+  // Window beforeunload event: Host tab closing emits end-class
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (isAdmin && socketRef.current) {
+        socketRef.current.emit('end-class');
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isAdmin]);
+
   // WebRTC Peer Connection Creator
   const createPeerConnection = (targetSocketId) => {
     if (peerConnectionsRef.current[targetSocketId]) {
@@ -470,6 +481,9 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
   };
 
   const handleCleanLeave = () => {
+    if (isAdmin && socketRef.current) {
+      socketRef.current.emit('end-class');
+    }
     cleanupMediaStreams();
     onLeave();
   };
@@ -679,6 +693,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
+      handleCleanLeave();
     }
   };
 

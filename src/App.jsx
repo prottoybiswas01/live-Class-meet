@@ -141,7 +141,6 @@ function MainClassroomWrapper() {
 
   const fetchStatus = async () => {
     try {
-      setLoading(true);
       const res = await fetch('/api/class/status');
       const data = await res.json();
       if (data.success) {
@@ -164,6 +163,13 @@ function MainClassroomWrapper() {
     }
 
     fetchStatus();
+
+    // Active status polling every 4 seconds for students to ensure immediate exit if class ends
+    const pollInterval = setInterval(() => {
+      fetchStatus();
+    }, 4000);
+
+    return () => clearInterval(pollInterval);
   }, [targetRoom]);
 
   const handleStudentJoin = (fullName) => {
