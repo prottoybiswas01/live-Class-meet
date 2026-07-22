@@ -108,7 +108,7 @@ function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStrea
     <div
       className={`relative rounded-xl overflow-hidden border transition-all duration-300 ${t.border} ${t.surfaceRaised} flex items-center justify-center group bg-black`}
       style={{
-        aspectRatio: "4/3",
+        aspectRatio: compact ? "16/9" : "4/3",
         boxShadow: speaking ? `0 0 0 2px ${AMBER}, 0 0 24px -4px ${AMBER}66` : "none",
       }}
     >
@@ -129,7 +129,7 @@ function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStrea
       )}
 
       <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1 z-10">
-        <span className="text-[11px] font-medium truncate px-1.5 py-0.5 rounded-md bg-black/60 text-white backdrop-blur-sm">
+        <span className="text-[10px] sm:text-[11px] font-medium truncate px-1.5 py-0.5 rounded-md bg-black/60 text-white backdrop-blur-sm">
           {p.name ? p.name.split(" ")[0] : "Student"} {p.role === 'admin' && '(Host)'}
         </span>
         <div className="flex items-center gap-1 px-1 py-0.5 rounded-md bg-black/60 backdrop-blur-sm">
@@ -160,14 +160,14 @@ function ControlButton({ icon: Icon, active, danger, label, onClick, badge }) {
     <button
       onClick={onClick}
       title={label}
-      className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200
+      className={`relative w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all duration-200 shrink-0
         ${danger ? "bg-[#E5484D] hover:bg-[#d13d42]" : active ? "text-white" : "bg-white/5 hover:bg-white/10 text-[#EEF0F4]"}
       `}
       style={active && !danger ? { background: AMBER, color: "#141822" } : undefined}
     >
-      <Icon size={19} />
+      <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
       {badge ? (
-        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#E5484D] text-white text-[10px] flex items-center justify-center font-semibold">
+        <span className="absolute -top-1 -right-1 min-w-[15px] h-3.5 sm:h-4 px-1 rounded-full bg-[#E5484D] text-white text-[9px] sm:text-[10px] flex items-center justify-center font-semibold">
           {badge}
         </span>
       ) : null}
@@ -454,7 +454,6 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
         setCam(true);
         socketRef.current?.emit('toggle-media', { mic, cam: true, hand: handRaised });
 
-        // Update WebRTC peers with new tracks
         Object.values(peerConnectionsRef.current).forEach(pc => {
           mediaStream.getTracks().forEach(t => pc.addTrack(t, mediaStream));
         });
@@ -522,7 +521,6 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           stopScreenSharing();
         };
 
-        // Send screen tracks to WebRTC peers
         Object.values(peerConnectionsRef.current).forEach(pc => {
           displayStream.getTracks().forEach(t => pc.addTrack(t, displayStream));
         });
@@ -669,7 +667,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
   return (
     <div className={`w-full h-screen flex flex-col ${t.bg} ${t.text} font-sans overflow-hidden relative`}>
-      {/* Hidden Audio Elements for Remote WebRTC Audio Tracks (Audible Speakers) */}
+      {/* Hidden Audio Elements for Remote WebRTC Audio Tracks */}
       {Object.entries(remoteStreams).map(([socketId, rStream]) => (
         <audio
           key={socketId}
@@ -684,19 +682,19 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
       {/* Host Knock/Admission Approval Popup Overlay */}
       {isAdmin && joinRequests.length > 0 && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-500 text-zinc-950 font-semibold text-xs shadow-2xl backdrop-blur-md animate-bounce border-2 border-amber-300">
-          <UserCheck size={20} />
-          <span><strong>{joinRequests[0].name}</strong> wants to join this class</span>
-          <div className="flex items-center gap-2 ml-2">
+        <div className="absolute top-14 sm:top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-amber-500 text-zinc-950 font-semibold text-xs shadow-2xl backdrop-blur-md animate-bounce border-2 border-amber-300 max-w-[92vw]">
+          <UserCheck size={18} className="shrink-0" />
+          <span className="truncate"><strong>{joinRequests[0].name}</strong> wants to join</span>
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => handleApproveJoin(joinRequests[0].socketId, true, joinRequests[0].name, joinRequests[0].color)}
-              className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold transition-all shadow"
+              className="px-2.5 py-1 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold transition-all shadow text-[11px]"
             >
-              Admit Student
+              Admit
             </button>
             <button
               onClick={() => handleApproveJoin(joinRequests[0].socketId, false, joinRequests[0].name, joinRequests[0].color)}
-              className="px-3.5 py-1.5 rounded-xl bg-red-700 hover:bg-red-600 text-white font-bold transition-all shadow"
+              className="px-2.5 py-1 rounded-xl bg-red-700 hover:bg-red-600 text-white font-bold transition-all shadow text-[11px]"
             >
               Deny
             </button>
@@ -705,88 +703,73 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
       )}
 
       {/* Header */}
-      <header className={`flex items-center justify-between px-5 py-3 border-b ${t.border} ${t.surface} shrink-0`}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: classStatus.isLive ? `${GREEN}1A` : `${RED}1A` }}>
-            <Radio size={12} color={classStatus.isLive ? GREEN : RED} className={classStatus.isLive ? "rec-dot" : ""} />
-            <span className="text-xs font-semibold" style={{ color: classStatus.isLive ? GREEN : RED }}>
+      <header className={`flex items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 border-b ${t.border} ${t.surface} shrink-0 gap-2 flex-wrap sm:flex-nowrap`}>
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full shrink-0" style={{ background: classStatus.isLive ? `${GREEN}1A` : `${RED}1A` }}>
+            <Radio size={11} color={classStatus.isLive ? GREEN : RED} className={classStatus.isLive ? "rec-dot" : ""} />
+            <span className="text-[11px] sm:text-xs font-semibold" style={{ color: classStatus.isLive ? GREEN : RED }}>
               {classStatus.isLive ? 'LIVE' : 'OFFLINE'}
             </span>
           </div>
 
-          <h1 className="text-sm font-semibold truncate">Advanced Organic Chemistry — Lecture Session</h1>
-          <span className={`text-xs mono ${t.sub}`}>{formatTime(elapsed)}</span>
+          <h1 className="text-xs sm:text-sm font-semibold truncate max-w-[140px] sm:max-w-none">Live Lecture Session</h1>
+          <span className={`text-[11px] sm:text-xs mono ${t.sub} shrink-0`}>{formatTime(elapsed)}</span>
 
           {recording && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: `${RED}14` }}>
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: `${RED}14` }}>
               <span className="w-1.5 h-1.5 rounded-full rec-dot" style={{ background: RED }} />
               <span className="text-xs font-medium mono" style={{ color: RED }}>REC {formatTime(recElapsed)}</span>
-            </div>
-          )}
-
-          {uploadStatus && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs">
-              <Upload size={12} className="animate-spin" />
-              <span>Drive Upload: {uploadStatus.progress}%</span>
             </div>
           )}
         </div>
 
         {/* Copy Invite Link & Theme Toggles */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           <button
             onClick={handleCopyLink}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full border text-[11px] sm:text-xs font-semibold transition-all ${
               copiedLink
                 ? "bg-emerald-600 text-white border-emerald-500 shadow-md"
                 : "border-[#262C3A] hover:bg-white/10 text-[#EEF0F4]"
             }`}
             title="Copy Student Join Link"
           >
-            {copiedLink ? <Check size={14} /> : <Copy size={14} />}
-            <span>{copiedLink ? "Link Copied!" : "Copy Student Link"}</span>
+            {copiedLink ? <Check size={13} /> : <Copy size={13} />}
+            <span>{copiedLink ? "Copied!" : "Copy Link"}</span>
           </button>
 
           {isAdmin && (
-            <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full border ${t.border} bg-white/5`}>
+            <div className={`flex items-center gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full border ${t.border} bg-white/5`}>
               {!classStatus.isLive ? (
                 <button
                   onClick={handleStartClass}
-                  className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors flex items-center gap-1"
+                  className="px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors flex items-center gap-1"
                 >
-                  <PlayCircle size={13} /> Start Class
+                  <PlayCircle size={12} /> Start
                 </button>
               ) : (
                 <button
                   onClick={handleEndClass}
-                  className="px-3 py-1 rounded-full text-xs font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors flex items-center gap-1"
+                  className="px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors flex items-center gap-1"
                 >
-                  <StopCircle size={13} /> End Class
+                  <StopCircle size={12} /> End
                 </button>
               )}
 
               <button
                 onClick={handleToggleRecording}
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors flex items-center gap-1 ${
+                className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[11px] sm:text-xs font-semibold transition-colors flex items-center gap-1 ${
                   recording ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-white/10 hover:bg-white/20 text-white"
                 }`}
               >
-                <Circle size={11} fill={recording ? RED : "none"} color={recording ? RED : "white"} />
-                {recording ? 'REC ON' : 'REC OFF'}
-              </button>
-
-              <button
-                onClick={handleMuteAll}
-                className="px-2.5 py-1 rounded-full text-xs font-semibold bg-white/10 hover:bg-white/20 text-white transition-colors flex items-center gap-1"
-                title="Mute All Students"
-              >
-                <VolumeX size={13} /> Mute All
+                <Circle size={10} fill={recording ? RED : "none"} color={recording ? RED : "white"} />
+                {recording ? 'REC' : 'REC'}
               </button>
             </div>
           )}
 
           {/* Theme selector */}
-          <div className={`flex items-center gap-0.5 rounded-full p-1 border ${t.border}`}>
+          <div className={`flex items-center gap-0.5 rounded-full p-0.5 sm:p-1 border ${t.border}`}>
             {[
               { key: "light", icon: Sun },
               { key: "system", icon: Monitor },
@@ -795,10 +778,10 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
               <button
                 key={key}
                 onClick={() => setThemeMode(key)}
-                className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${themeMode === key ? "" : t.hoverSurface}`}
+                className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-colors ${themeMode === key ? "" : t.hoverSurface}`}
                 style={themeMode === key ? { background: AMBER, color: "#141822" } : undefined}
               >
-                <Icon size={14} />
+                <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               </button>
             ))}
           </div>
@@ -807,11 +790,11 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
       {/* Main Body */}
       <div className="flex-1 flex overflow-hidden relative">
-        <main className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4">
           {sharing ? (
-            <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 overflow-hidden">
+            <div className="flex-1 flex flex-col lg:flex-row gap-3 sm:gap-4 overflow-hidden">
               {/* Screen share Google Meet presentation stage */}
-              <div className={`relative flex-1 rounded-2xl border ${t.border} overflow-hidden bg-black flex items-center justify-center`}>
+              <div className={`relative flex-1 rounded-2xl border ${t.border} overflow-hidden bg-black flex items-center justify-center min-h-[200px]`}>
                 <video
                   ref={(el) => {
                     if (el && el.srcObject !== screenStream) {
@@ -824,20 +807,20 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                 />
 
                 {/* Presenting Badge & Stop Button */}
-                <div className="absolute top-4 left-4 flex items-center gap-3 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white text-xs">
-                  <MonitorUp size={16} color={AMBER} className="animate-pulse" />
-                  <span className="font-medium">You are sharing your screen</span>
+                <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white text-[11px] sm:text-xs">
+                  <MonitorUp size={14} color={AMBER} className="animate-pulse" />
+                  <span className="font-medium truncate max-w-[120px] sm:max-w-none">Screen Sharing Active</span>
                   <button
                     onClick={stopScreenSharing}
-                    className="ml-2 px-2.5 py-0.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-[11px] font-semibold transition-colors"
+                    className="ml-1 px-2 py-0.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-[10px] font-semibold transition-colors"
                   >
-                    Stop Sharing
+                    Stop
                   </button>
                 </div>
 
                 {/* Host Local Camera PiP */}
                 {cam && (
-                  <div className={`absolute bottom-4 right-4 w-36 sm:w-48 rounded-xl overflow-hidden border-2 shadow-2xl transition-all duration-300 z-20`}
+                  <div className={`absolute bottom-3 right-3 w-28 sm:w-44 rounded-xl overflow-hidden border-2 shadow-2xl transition-all duration-300 z-20`}
                     style={{ borderColor: AMBER, aspectRatio: "16/9" }}>
                     <video
                       ref={(el) => {
@@ -850,7 +833,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                       muted
                       className="w-full h-full object-cover"
                     />
-                    <span className="absolute bottom-1 left-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-black/60 text-white">
+                    <span className="absolute bottom-1 left-1 text-[9px] sm:text-[10px] font-medium px-1 py-0.5 rounded bg-black/60 text-white truncate max-w-[90%]">
                       {user.name} (You)
                     </span>
                   </div>
@@ -858,9 +841,9 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
               </div>
 
               {/* Side strip for participants */}
-              <div className="flex lg:flex-col gap-2.5 overflow-x-auto lg:overflow-y-auto lg:w-44 shrink-0 pb-1 lg:pb-0">
+              <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto lg:w-44 shrink-0 pb-1 lg:pb-0">
                 {participants.map((p) => (
-                  <div key={p.id || p.socketId} className="w-28 lg:w-full shrink-0">
+                  <div key={p.id || p.socketId} className="w-24 sm:w-28 lg:w-full shrink-0">
                     <ParticipantCard
                       p={p}
                       t={t}
@@ -875,10 +858,10 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col gap-4 p-4 overflow-y-auto">
+            <div className="flex-1 flex flex-col gap-3 sm:gap-4 overflow-y-auto pb-16">
               {/* Host spotlight card */}
-              <div className={`relative w-full rounded-2xl border ${t.border} ${t.surfaceRaised} overflow-hidden shrink-0 bg-zinc-950`}
-                style={{ aspectRatio: "21/8" }}>
+              <div className={`relative w-full rounded-2xl border ${t.border} ${t.surfaceRaised} overflow-hidden shrink-0 bg-zinc-950 min-h-[160px] sm:min-h-[220px]`}
+                style={{ aspectRatio: "16/9" }}>
                 {(cam && isAdmin && localStream) || (hostParticipant?.cam && remoteStreams[hostParticipant?.socketId]) ? (
                   <video
                     ref={(el) => {
@@ -895,30 +878,30 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                 ) : (
                   <>
                     <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 30% 40%, ${AVATAR_COLORS[0]}22, transparent 60%)` }} />
-                    <div className="absolute inset-0 flex items-center gap-4 px-8">
-                      <Avatar name={hostDisplayName} color={AVATAR_COLORS[0]} size={72} ring />
-                      <div>
-                        <div className="font-semibold text-lg flex items-center gap-2">
-                          {hostDisplayName}
-                          <ShieldCheck size={18} color={AMBER} />
+                    <div className="absolute inset-0 flex items-center gap-3 sm:gap-4 px-4 sm:px-8">
+                      <Avatar name={hostDisplayName} color={AVATAR_COLORS[0]} size={56} ring />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-base sm:text-lg flex items-center gap-1.5 sm:gap-2 truncate">
+                          <span className="truncate">{hostDisplayName}</span>
+                          <ShieldCheck size={18} color={AMBER} className="shrink-0" />
                         </div>
-                        <div className={`text-xs ${t.sub} flex items-center gap-1.5 mt-0.5`}>
-                          <Pin size={11} /> Host · Main Classroom Stage
+                        <div className={`text-[11px] sm:text-xs ${t.sub} flex items-center gap-1 mt-0.5`}>
+                          <Pin size={11} className="shrink-0" /> Host · Main Stage
                         </div>
                       </div>
                     </div>
                   </>
                 )}
 
-                <div className="absolute bottom-3 right-4 flex items-center gap-1.5 px-2 py-1 rounded-full bg-black/50 backdrop-blur-sm z-10">
-                  <Mic size={12} color={mic ? "#fff" : RED} />
-                  <Wifi size={12} color={GREEN} />
+                <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2 py-1 rounded-full bg-black/60 backdrop-blur-sm z-10">
+                  <Mic size={11} color={mic ? "#fff" : RED} />
+                  <Wifi size={11} color={GREEN} />
                 </div>
               </div>
 
               {/* Grid of participants */}
               <div
-                className="grid gap-3"
+                className="grid gap-2 sm:gap-3"
                 style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
               >
                 {participants.map((p) => (
@@ -939,11 +922,11 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
         {/* Chat Panel */}
         <aside
-          className={`absolute top-0 right-0 h-full w-full sm:w-80 border-l ${t.border} ${t.surface} flex flex-col transition-transform duration-300 ease-out z-20`}
+          className={`absolute top-0 right-0 h-full w-full sm:w-80 border-l ${t.border} ${t.surface} flex flex-col transition-transform duration-300 ease-out z-40`}
           style={{ transform: chatOpen ? "translateX(0)" : "translateX(100%)" }}
         >
           <div className={`flex items-center justify-between px-4 py-3 border-b ${t.border}`}>
-            <span className="font-semibold text-sm">Class chat</span>
+            <span className="font-semibold text-sm">Class Chat</span>
             <button onClick={() => setChatOpen(false)} className={`w-7 h-7 rounded-full flex items-center justify-center ${t.hoverSurface}`}>
               <X size={16} />
             </button>
@@ -984,7 +967,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
         {/* Participants Panel */}
         <aside
-          className={`absolute top-0 right-0 h-full w-full sm:w-80 border-l ${t.border} ${t.surface} flex flex-col transition-transform duration-300 ease-out z-10`}
+          className={`absolute top-0 right-0 h-full w-full sm:w-80 border-l ${t.border} ${t.surface} flex flex-col transition-transform duration-300 ease-out z-40`}
           style={{ transform: participantsOpen ? "translateX(0)" : "translateX(100%)" }}
         >
           <div className={`flex items-center justify-between px-4 py-3 border-b ${t.border}`}>
@@ -1004,13 +987,13 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleApproveMic(req.socketId, true)}
-                      className="px-2 py-0.5 rounded bg-emerald-600 text-white font-medium"
+                      className="px-2 py-0.5 rounded bg-emerald-600 text-white font-medium text-[11px]"
                     >
                       Allow
                     </button>
                     <button
                       onClick={() => handleApproveMic(req.socketId, false)}
-                      className="px-2 py-0.5 rounded bg-red-600 text-white font-medium"
+                      className="px-2 py-0.5 rounded bg-red-600 text-white font-medium text-[11px]"
                     >
                       Reject
                     </button>
@@ -1053,19 +1036,19 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
         </aside>
       </div>
 
-      {/* Floating Control Bar */}
-      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30">
-        <div className={`flex items-center gap-2 px-3 py-2.5 rounded-full border ${t.border} shadow-2xl`}
-          style={{ background: isDark ? "rgba(20,24,34,0.85)" : "rgba(255,255,255,0.85)", backdropFilter: "blur(16px)" }}>
+      {/* Floating Mobile Responsive Control Bar */}
+      <div className="absolute bottom-3 sm:bottom-5 left-1/2 -translate-x-1/2 z-30 max-w-[96vw] overflow-x-auto">
+        <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-full border ${t.border} shadow-2xl shrink-0`}
+          style={{ background: isDark ? "rgba(20,24,34,0.92)" : "rgba(255,255,255,0.92)", backdropFilter: "blur(16px)" }}>
           <ControlButton icon={mic ? Mic : MicOff} active={mic} label="Microphone" onClick={handleToggleMic} />
           <ControlButton icon={cam ? Video : VideoOff} active={cam} label="Camera" onClick={handleToggleCam} />
           <ControlButton icon={sharing ? ScreenShareOff : ScreenShare} active={sharing} label="Share screen" onClick={handleToggleScreenShare} />
           <ControlButton icon={Circle} active={recording} label="Record" onClick={handleToggleRecording} />
-          <div className={`w-px h-6 mx-0.5 ${isDark ? "bg-white/10" : "bg-black/10"}`} />
+          <div className={`w-px h-5 sm:h-6 mx-0.5 ${isDark ? "bg-white/10" : "bg-black/10"}`} />
           <ControlButton icon={Users} active={participantsOpen} label="Participants" badge={participants.length} onClick={() => { setParticipantsOpen((v) => !v); setChatOpen(false); }} />
           <ControlButton icon={MessageSquare} active={chatOpen} label="Chat" badge={!chatOpen ? messages.length : null} onClick={() => { setChatOpen((v) => !v); setParticipantsOpen(false); }} />
           <ControlButton icon={Hand} active={handRaised} label="Raise hand" onClick={handleToggleHand} />
-          <div className={`w-px h-6 mx-0.5 ${isDark ? "bg-white/10" : "bg-black/10"}`} />
+          <div className={`w-px h-5 sm:h-6 mx-0.5 ${isDark ? "bg-white/10" : "bg-black/10"}`} />
           <ControlButton icon={PhoneOff} danger label="Leave class" onClick={handleCleanLeave} />
         </div>
       </div>
