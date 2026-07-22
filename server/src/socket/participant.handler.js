@@ -18,30 +18,15 @@ export const registerParticipantHandlers = (io, socket) => {
       });
       io.emit('participant-list', classStateService.getAllParticipants());
     } else {
-      const participants = classStateService.getAllParticipants();
-      const admin = participants.find((p) => p.role === 'admin');
+      // Broadcast knock admission request to all sockets so active Host/Teacher receives it reliably
+      io.emit('join-request-received', {
+        socketId: socket.id,
+        name,
+        role,
+        color,
+      });
 
-      if (!admin) {
-        // Auto-admit if host hasn't restricted or is initializing
-        const participant = classStateService.addParticipant(socket.id, name, role, color);
-        socket.emit('room-joined', {
-          self: participant,
-          classStatus: classStateService.getClassStatus(),
-          participants: classStateService.getAllParticipants(),
-          messages: classStateService.getChatHistory(),
-        });
-        socket.broadcast.emit('participant-joined', participant);
-        io.emit('participant-list', classStateService.getAllParticipants());
-      } else {
-        // Send Knock / Admission Request to Admin Host
-        io.to(admin.socketId).emit('join-request-received', {
-          socketId: socket.id,
-          name,
-          role,
-          color,
-        });
-        socket.emit('waiting-for-approval', { message: 'Waiting for host to admit you to the class...' });
-      }
+      socket.emit('waiting-for-approval', { message: 'Waiting for host to admit you to the class...' });
     }
   });
 

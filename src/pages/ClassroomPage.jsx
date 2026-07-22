@@ -363,7 +363,13 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     });
 
     socket.on('join-request-received', (reqData) => {
-      setJoinRequests((prev) => [...prev, reqData]);
+      if (user?.role === 'admin') {
+        setJoinRequests((prev) => {
+          const exists = prev.some((r) => r.socketId === reqData.socketId);
+          if (exists) return prev;
+          return [...prev, reqData];
+        });
+      }
     });
 
     socket.on('chat-message', (msg) => {
