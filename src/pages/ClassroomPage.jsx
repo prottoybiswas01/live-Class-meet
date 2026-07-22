@@ -5,7 +5,7 @@ import {
   Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, Circle,
   Users, MessageSquare, Hand, PhoneOff, Search, Sun, Moon, Monitor,
   X, Send, Smile, Radio, Wifi, Pin, ShieldCheck, VolumeX, UserX,
-  PlayCircle, StopCircle, Upload, MonitorUp, Copy, Check
+  PlayCircle, StopCircle, Upload, MonitorUp, Copy, Check, UserCheck
 } from "lucide-react";
 
 /* ---------------------------------------------------------------
@@ -197,6 +197,9 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
 
+  // Host Admission Requests State
+  const [joinRequests, setJoinRequests] = useState([]);
+
   // Real Media Stream Refs & State
   const localStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
@@ -267,6 +270,10 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
       setParticipants(list);
     });
 
+    socket.on('join-request-received', (reqData) => {
+      setJoinRequests((prev) => [...prev, reqData]);
+    });
+
     socket.on('chat-message', (msg) => {
       setMessages((prev) => [...prev, msg]);
     });
@@ -334,6 +341,11 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     navigator.clipboard.writeText(inviteUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const handleApproveJoin = (socketId, approved, name, color) => {
+    socketRef.current?.emit('approve-join', { socketId, approved, name, color });
+    setJoinRequests((prev) => prev.filter((r) => r.socketId !== socketId));
   };
 
   // Toggle Camera
@@ -449,7 +461,6 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
   const handleToggleRecording = async () => {
     const token = localStorage.getItem('adminToken');
     if (!recording) {
-      // Start Recording
       const recordStream = screenStreamRef.current || localStreamRef.current;
       if (!recordStream) {
         alert("Please turn on your Camera or Screen Share first to start recording lecture video!");
@@ -493,7 +504,6 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
         console.error("Recording error:", err);
       }
     } else {
-      // Stop Recording & Download File
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       }
@@ -548,7 +558,29 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
   );
 
   return (
-    <div className={`w-full h-screen flex flex-col ${t.bg} ${t.text} font-sans overflow-hidden`}>
+    <div className={`w-full h-screen flex flex-col ${t.bg} ${t.text} font-sans overflow-hidden relative`}>
+      {/* Host Knock/Admission Approval Popup Overlay */}
+      {isAdmin && joinRequests.length > 0 && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-500 text-zinc-950 font-semibold text-xs shadow-2xl backdrop-blur-md animate-bounce border-2 border-amber-300">
+          <UserCheck size={20} />
+          <span><strong>{joinRequests[0].name}</strong> wants to join this class</span>
+          <div className="flex items-center gap-2 ml-2">
+            <button
+              onClick={() => handleApproveJoin(joinRequests[0].socketId, true, joinRequests[0].name, joinRequests[0].color)}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold transition-all shadow"
+            >
+              Admit Student
+            </button>
+            <button
+              onClick={() => handleApproveJoin(joinRequests[0].socketId, false, joinRequests[0].name, joinRequests[0].color)}
+              className="px-3.5 py-1.5 rounded-xl bg-red-700 hover:bg-red-600 text-white font-bold transition-all shadow"
+            >
+              Deny
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className={`flex items-center justify-between px-5 py-3 border-b ${t.border} ${t.surface} shrink-0`}>
         <div className="flex items-center gap-3 min-w-0">
