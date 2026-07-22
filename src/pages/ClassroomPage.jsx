@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 import {
   Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, Circle,
   Users, MessageSquare, Hand, PhoneOff, Search, Sun, Moon, Monitor,
   X, Send, Smile, Radio, Wifi, Pin, ShieldCheck, VolumeX, UserX,
-  PlayCircle, StopCircle, CheckCircle, Upload
+  PlayCircle, StopCircle, Upload, MonitorUp, StopCircle as StopIcon
 } from "lucide-react";
 
 /* ---------------------------------------------------------------
-   Tokens matching exact original design palette
+   Theme & Styling Palette
 ----------------------------------------------------------------*/
 const DARK = {
   bg: "bg-[#0B0E14]",
@@ -93,28 +93,42 @@ function StatusDot({ ok }) {
   );
 }
 
-function ParticipantCard({ p, t, speaking, compact, onRemove }) {
+function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStream, localVideoRef }) {
+  const showVideo = p.cam && isSelf && localStream;
+
   return (
     <div
-      className={`relative rounded-xl overflow-hidden border transition-all duration-300 ${t.border} ${t.surfaceRaised} flex items-center justify-center group`}
+      className={`relative rounded-xl overflow-hidden border transition-all duration-300 ${t.border} ${t.surfaceRaised} flex items-center justify-center group bg-black`}
       style={{
         aspectRatio: "4/3",
         boxShadow: speaking ? `0 0 0 2px ${AMBER}, 0 0 24px -4px ${AMBER}66` : "none",
       }}
     >
-      {p.cam ? (
-        <div
-          className="absolute inset-0"
-          style={{ background: `linear-gradient(135deg, ${p.color || '#6C6FEF'}33, transparent 70%)` }}
+      {showVideo ? (
+        <video
+          ref={(el) => {
+            if (el && localStream) {
+              el.srcObject = localStream;
+            }
+          }}
+          autoPlay
+          playsInline
+          muted
+          className="absolute inset-0 w-full h-full object-cover rounded-xl"
         />
-      ) : null}
-      <Avatar name={p.name} color={p.color || '#6C6FEF'} size={compact ? 32 : 48} />
+      ) : p.cam ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 text-zinc-400">
+          <Avatar name={p.name} color={p.color || '#6C6FEF'} size={compact ? 32 : 48} />
+        </div>
+      ) : (
+        <Avatar name={p.name} color={p.color || '#6C6FEF'} size={compact ? 32 : 48} />
+      )}
 
-      <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1">
-        <span className="text-[11px] font-medium truncate px-1.5 py-0.5 rounded-md bg-black/40 text-white">
+      <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1 z-10">
+        <span className="text-[11px] font-medium truncate px-1.5 py-0.5 rounded-md bg-black/60 text-white backdrop-blur-sm">
           {p.name ? p.name.split(" ")[0] : "Student"} {p.role === 'admin' && '(Host)'}
         </span>
-        <div className="flex items-center gap-1 px-1 py-0.5 rounded-md bg-black/40">
+        <div className="flex items-center gap-1 px-1 py-0.5 rounded-md bg-black/60 backdrop-blur-sm">
           {p.hand && <Hand size={11} color={AMBER} />}
           {p.mic ? <Mic size={11} color="#fff" /> : <MicOff size={11} color={RED} />}
         </div>
@@ -124,14 +138,14 @@ function ParticipantCard({ p, t, speaking, compact, onRemove }) {
         <button
           onClick={() => onRemove(p.socketId)}
           title="Remove Participant"
-          className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-600/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-600/80 text-white opacity-0 group-hover:opacity-100 transition-opacity z-10"
         >
           <UserX size={14} />
         </button>
       )}
 
       {speaking && (
-        <div className="absolute inset-0 rounded-xl pointer-events-none animate-pulse" style={{ boxShadow: `inset 0 0 0 1px ${AMBER}55` }} />
+        <div className="absolute inset-0 rounded-xl pointer-events-none animate-pulse z-10" style={{ boxShadow: `inset 0 0 0 1px ${AMBER}55` }} />
       )}
     </div>
   );
@@ -182,6 +196,15 @@ export default function ClassroomPage({ user, onLeave }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
 
+  // Real Media Stream Refs & State
+  const localStreamRef = useRef(null);
+  const screenStreamRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const screenVideoRef = useRef(null);
+
+  const [localStream, setLocalStream] = useState(null);
+  const [screenStream, setScreenStream] = useState(null);
+
   // Media states
   const [mic, setMic] = useState(isAdmin);
   const [cam, setCam] = useState(false);
@@ -195,10 +218,6 @@ export default function ClassroomPage({ user, onLeave }) {
   const [recElapsed, setRecElapsed] = useState(0);
   const [micRequests, setMicRequests] = useState([]);
   const [uploadStatus, setUploadStatus] = useState(null);
-
-  // Recording MediaRecorder ref
-  const mediaRecorderRef = useRef(null);
-  const recordedChunksRef = useRef([]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -257,6 +276,9 @@ export default function ClassroomPage({ user, onLeave }) {
 
     socket.on('mute-all', () => {
       setMic(false);
+      if (localStreamRef.current) {
+        localStreamRef.current.getAudioTracks().forEach(t => t.enabled = false);
+      }
       socket.emit('toggle-media', { mic: false, cam, hand: handRaised });
     });
 
@@ -266,7 +288,7 @@ export default function ClassroomPage({ user, onLeave }) {
 
     socket.on('removed-by-host', () => {
       alert("You have been removed from the class by the host.");
-      onLeave();
+      handleCleanLeave();
     });
 
     socket.on('recording-status-change', ({ isRecording }) => {
@@ -280,20 +302,117 @@ export default function ClassroomPage({ user, onLeave }) {
 
     return () => {
       socket.disconnect();
+      cleanupMediaStreams();
     };
   }, [user]);
 
-  // Broadcast local media changes
-  const handleToggleMic = () => {
-    const newMic = !mic;
-    setMic(newMic);
-    socketRef.current?.emit('toggle-media', { mic: newMic, cam, hand: handRaised });
+  const cleanupMediaStreams = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+    }
   };
 
-  const handleToggleCam = () => {
-    const newCam = !cam;
-    setCam(newCam);
-    socketRef.current?.emit('toggle-media', { mic, cam: newCam, hand: handRaised });
+  const handleCleanLeave = () => {
+    cleanupMediaStreams();
+    onLeave();
+  };
+
+  // Toggle Camera
+  const handleToggleCam = async () => {
+    if (!cam) {
+      try {
+        const mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: mic,
+        });
+        localStreamRef.current = mediaStream;
+        setLocalStream(mediaStream);
+        setCam(true);
+        socketRef.current?.emit('toggle-media', { mic, cam: true, hand: handRaised });
+      } catch (err) {
+        console.error("Camera access denied or unavailable:", err);
+        alert("Camera could not be accessed. Please allow camera permissions in browser settings.");
+      }
+    } else {
+      if (localStreamRef.current) {
+        localStreamRef.current.getVideoTracks().forEach((track) => track.stop());
+      }
+      setCam(false);
+      socketRef.current?.emit('toggle-media', { mic, cam: false, hand: handRaised });
+    }
+  };
+
+  // Toggle Mic
+  const handleToggleMic = async () => {
+    const nextMic = !mic;
+    setMic(nextMic);
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((track) => {
+        track.enabled = nextMic;
+      });
+    } else if (nextMic) {
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (localStreamRef.current) {
+          audioStream.getAudioTracks().forEach((t) => localStreamRef.current.addTrack(t));
+        } else {
+          localStreamRef.current = audioStream;
+          setLocalStream(audioStream);
+        }
+      } catch (e) {
+        console.warn("Microphone access error:", e);
+      }
+    }
+
+    socketRef.current?.emit('toggle-media', { mic: nextMic, cam, hand: handRaised });
+  };
+
+  // Toggle Screen Share (Google Meet style)
+  const handleToggleScreenShare = async () => {
+    if (!classStatus.screenShareAllowed && !isAdmin) {
+      alert("Screen sharing is currently restricted by the host.");
+      return;
+    }
+
+    if (!sharing) {
+      try {
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { cursor: "always" },
+          audio: true,
+        });
+
+        screenStreamRef.current = displayStream;
+        setScreenStream(displayStream);
+        setSharing(true);
+
+        // When user stops sharing via browser native floating bar
+        displayStream.getVideoTracks()[0].onended = () => {
+          stopScreenSharing();
+        };
+
+        socketRef.current?.emit('toggle-media', { mic, cam, hand: handRaised, sharing: true });
+      } catch (err) {
+        console.error("Screen sharing error:", err);
+      }
+    } else {
+      stopScreenSharing();
+    }
+  };
+
+  const stopScreenSharing = () => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+    }
+    setScreenStream(null);
+    setSharing(false);
+    socketRef.current?.emit('toggle-media', { mic, cam, hand: handRaised, sharing: false });
   };
 
   const handleToggleHand = () => {
@@ -335,42 +454,16 @@ export default function ClassroomPage({ user, onLeave }) {
   const handleToggleRecording = async () => {
     const token = localStorage.getItem('adminToken');
     if (!recording) {
-      // Start recording API
       await fetch('/api/class/recording/start', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
     } else {
-      // Stop recording API & Trigger Google Drive Upload
       await fetch('/api/class/recording/stop', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
     }
-  };
-
-  const handleToggleScreenShareControl = async () => {
-    const token = localStorage.getItem('adminToken');
-    await fetch('/api/class/controls', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ control: 'screenShare', value: !classStatus.screenShareAllowed }),
-    });
-  };
-
-  const handleToggleChatControl = async () => {
-    const token = localStorage.getItem('adminToken');
-    await fetch('/api/class/controls', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ control: 'chat', value: !classStatus.chatAllowed }),
-    });
   };
 
   const handleMuteAll = async () => {
@@ -490,41 +583,67 @@ export default function ClassroomPage({ user, onLeave }) {
         <main className="flex-1 flex flex-col overflow-hidden">
           {sharing ? (
             <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 overflow-hidden">
-              {/* Screen share stage */}
-              <div className={`relative flex-1 rounded-2xl border ${t.border} overflow-hidden`}
-                style={{ background: isDark ? "#0E121A" : "#EDEEF2" }}>
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8">
-                  <div className={`w-full max-w-xl aspect-video rounded-xl border ${t.border} ${t.surface} flex flex-col p-6 gap-3`}>
-                    <div className="h-3 w-1/3 rounded-full" style={{ background: `${AMBER}55` }} />
-                    <div className={`h-2 w-full rounded-full ${isDark ? "bg-white/10" : "bg-black/10"}`} />
-                    <div className={`h-2 w-5/6 rounded-full ${isDark ? "bg-white/10" : "bg-black/10"}`} />
-                    <div className="flex-1 rounded-lg mt-2" style={{ background: `linear-gradient(135deg, ${AMBER}22, transparent)` }} />
-                  </div>
-                  <span className={`text-xs ${t.faint}`}>Screen Sharing Active — Host Presentation</span>
+              {/* Screen share Google Meet presentation stage */}
+              <div className={`relative flex-1 rounded-2xl border ${t.border} overflow-hidden bg-black flex items-center justify-center`}>
+                <video
+                  ref={(el) => {
+                    screenVideoRef.current = el;
+                    if (el && screenStream) {
+                      el.srcObject = screenStream;
+                    }
+                  }}
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-contain bg-black"
+                />
+
+                {/* Presenting Badge & Stop Button */}
+                <div className="absolute top-4 left-4 flex items-center gap-3 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white text-xs">
+                  <MonitorUp size={16} color={AMBER} className="animate-pulse" />
+                  <span className="font-medium">You are sharing your screen</span>
+                  <button
+                    onClick={stopScreenSharing}
+                    className="ml-2 px-2.5 py-0.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-[11px] font-semibold transition-colors"
+                  >
+                    Stop Sharing
+                  </button>
                 </div>
 
-                {/* Host PiP */}
-                <div className={`absolute bottom-4 right-4 w-32 sm:w-44 md:w-56 rounded-xl overflow-hidden border-2 shadow-2xl transition-all duration-300`}
-                  style={{ borderColor: AMBER, aspectRatio: "16/10" }}>
-                  <div className={`w-full h-full ${t.surfaceRaised} flex items-center justify-center relative`}>
-                    <Avatar name={user.name} color={AVATAR_COLORS[0]} size={44} ring />
-                    <span className="absolute bottom-1 left-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-black/50 text-white">
-                      {user.name} (Host)
+                {/* Host Local Camera PiP */}
+                {cam && (
+                  <div className={`absolute bottom-4 right-4 w-36 sm:w-48 rounded-xl overflow-hidden border-2 shadow-2xl transition-all duration-300 z-20`}
+                    style={{ borderColor: AMBER, aspectRatio: "16/9" }}>
+                    <video
+                      ref={(el) => {
+                        if (el && localStream) {
+                          el.srcObject = localStream;
+                        }
+                      }}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute bottom-1 left-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-black/60 text-white">
+                      {user.name} (You)
                     </span>
                   </div>
-                </div>
-
-                <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 rounded-full bg-black/40">
-                  <ScreenShare size={12} color="#fff" />
-                  <span className="text-[11px] text-white font-medium">Presenting</span>
-                </div>
+                )}
               </div>
 
-              {/* Side strip */}
-              <div className="flex lg:flex-col gap-2.5 overflow-x-auto lg:overflow-y-auto lg:w-40 shrink-0 pb-1 lg:pb-0">
+              {/* Side strip for participants */}
+              <div className="flex lg:flex-col gap-2.5 overflow-x-auto lg:overflow-y-auto lg:w-44 shrink-0 pb-1 lg:pb-0">
                 {participants.map((p) => (
-                  <div key={p.id} className="w-28 lg:w-full shrink-0">
-                    <ParticipantCard p={p} t={t} compact onRemove={isAdmin ? handleRemoveParticipant : null} />
+                  <div key={p.id || p.socketId} className="w-28 lg:w-full shrink-0">
+                    <ParticipantCard
+                      p={p}
+                      t={t}
+                      compact
+                      isSelf={p.socketId === socketRef.current?.id}
+                      localStream={localStream}
+                      localVideoRef={localVideoRef}
+                      onRemove={isAdmin ? handleRemoveParticipant : null}
+                    />
                   </div>
                 ))}
               </div>
@@ -532,23 +651,40 @@ export default function ClassroomPage({ user, onLeave }) {
           ) : (
             <div className="flex-1 flex flex-col gap-4 p-4 overflow-y-auto">
               {/* Host spotlight card */}
-              <div className={`relative w-full rounded-2xl border ${t.border} ${t.surfaceRaised} overflow-hidden shrink-0`}
+              <div className={`relative w-full rounded-2xl border ${t.border} ${t.surfaceRaised} overflow-hidden shrink-0 bg-zinc-950`}
                 style={{ aspectRatio: "21/8" }}>
-                <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 30% 40%, ${AVATAR_COLORS[0]}22, transparent 60%)` }} />
-                <div className="absolute inset-0 flex items-center gap-4 px-8">
-                  <Avatar name="Dr. Amara Okafor" color={AVATAR_COLORS[0]} size={72} ring />
-                  <div>
-                    <div className="font-semibold text-lg flex items-center gap-2">
-                      Dr. Amara Okafor
-                      <ShieldCheck size={18} color={AMBER} />
+                {cam && isAdmin && localStream ? (
+                  <video
+                    ref={(el) => {
+                      if (el && localStream) {
+                        el.srcObject = localStream;
+                      }
+                    }}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <>
+                    <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 30% 40%, ${AVATAR_COLORS[0]}22, transparent 60%)` }} />
+                    <div className="absolute inset-0 flex items-center gap-4 px-8">
+                      <Avatar name={isAdmin ? user.name : "Dr. Amara Okafor"} color={AVATAR_COLORS[0]} size={72} ring />
+                      <div>
+                        <div className="font-semibold text-lg flex items-center gap-2">
+                          {isAdmin ? user.name : "Dr. Amara Okafor"}
+                          <ShieldCheck size={18} color={AMBER} />
+                        </div>
+                        <div className={`text-xs ${t.sub} flex items-center gap-1.5 mt-0.5`}>
+                          <Pin size={11} /> Host · Main Classroom Stage
+                        </div>
+                      </div>
                     </div>
-                    <div className={`text-xs ${t.sub} flex items-center gap-1.5 mt-0.5`}>
-                      <Pin size={11} /> Host · Instructor
-                    </div>
-                  </div>
-                </div>
-                <div className="absolute bottom-3 right-4 flex items-center gap-1.5 px-2 py-1 rounded-full bg-black/30">
-                  <Mic size={12} color="#fff" />
+                  </>
+                )}
+
+                <div className="absolute bottom-3 right-4 flex items-center gap-1.5 px-2 py-1 rounded-full bg-black/50 backdrop-blur-sm z-10">
+                  <Mic size={12} color={mic ? "#fff" : RED} />
                   <Wifi size={12} color={GREEN} />
                 </div>
               </div>
@@ -560,9 +696,12 @@ export default function ClassroomPage({ user, onLeave }) {
               >
                 {participants.map((p) => (
                   <ParticipantCard
-                    key={p.id}
+                    key={p.id || p.socketId}
                     p={p}
                     t={t}
+                    isSelf={p.socketId === socketRef.current?.id}
+                    localStream={localStream}
+                    localVideoRef={localVideoRef}
                     onRemove={isAdmin ? handleRemoveParticipant : null}
                   />
                 ))}
@@ -693,14 +832,14 @@ export default function ClassroomPage({ user, onLeave }) {
           style={{ background: isDark ? "rgba(20,24,34,0.85)" : "rgba(255,255,255,0.85)", backdropFilter: "blur(16px)" }}>
           <ControlButton icon={mic ? Mic : MicOff} active={mic} label="Microphone" onClick={handleToggleMic} />
           <ControlButton icon={cam ? Video : VideoOff} active={cam} label="Camera" onClick={handleToggleCam} />
-          <ControlButton icon={sharing ? ScreenShareOff : ScreenShare} active={sharing} label="Share screen" onClick={() => setSharing((v) => !v)} />
+          <ControlButton icon={sharing ? ScreenShareOff : ScreenShare} active={sharing} label="Share screen" onClick={handleToggleScreenShare} />
           <ControlButton icon={Circle} active={recording} label="Record" onClick={handleToggleRecording} />
           <div className={`w-px h-6 mx-0.5 ${isDark ? "bg-white/10" : "bg-black/10"}`} />
           <ControlButton icon={Users} active={participantsOpen} label="Participants" badge={participants.length} onClick={() => { setParticipantsOpen((v) => !v); setChatOpen(false); }} />
           <ControlButton icon={MessageSquare} active={chatOpen} label="Chat" badge={!chatOpen ? messages.length : null} onClick={() => { setChatOpen((v) => !v); setParticipantsOpen(false); }} />
           <ControlButton icon={Hand} active={handRaised} label="Raise hand" onClick={handleToggleHand} />
           <div className={`w-px h-6 mx-0.5 ${isDark ? "bg-white/10" : "bg-black/10"}`} />
-          <ControlButton icon={PhoneOff} danger label="Leave class" onClick={onLeave} />
+          <ControlButton icon={PhoneOff} danger label="Leave class" onClick={handleCleanLeave} />
         </div>
       </div>
     </div>
