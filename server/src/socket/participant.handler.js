@@ -85,4 +85,25 @@ export const registerParticipantHandlers = (io, socket) => {
     const p = classStateService.getParticipantBySocket(socket.id);
     io.to('live-class-room').emit('mic-request-received', { socketId: socket.id, name: p ? p.name : 'Student' });
   });
+
+  socket.on('end-class', () => {
+    const status = classStateService.endClass();
+    io.to('live-class-room').emit('class-ended', { message: 'The teacher has ended this live lecture session.' });
+    io.to('live-class-room').emit('class-status-change', status);
+  });
+
+  socket.on('disconnect', () => {
+    const participant = classStateService.removeParticipant(socket.id);
+    if (participant) {
+      io.to('live-class-room').emit('participant-left', { socketId: socket.id, name: participant.name });
+      io.to('live-class-room').emit('participant-list', classStateService.getAllParticipants());
+
+      // If Host disconnects, automatically notify all students and mark class ended
+      if (participant.role === 'admin') {
+        const status = classStateService.endClass();
+        io.to('live-class-room').emit('class-ended', { message: 'The teacher has ended or left the live lecture session.' });
+        io.to('live-class-room').emit('class-status-change', status);
+      }
+    }
+  });
 };

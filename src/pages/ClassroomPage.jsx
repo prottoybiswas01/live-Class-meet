@@ -380,9 +380,21 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
       setMessages((prev) => [...prev, msg]);
     });
 
+    socket.on('class-ended', ({ message }) => {
+      cleanupMediaStreams();
+      if (!user?.role || user?.role !== 'admin') {
+        alert(message || "The teacher has ended this live lecture session.");
+        onLeave();
+      }
+    });
+
     socket.on('class-status-change', (status) => {
       setClassStatus(status);
       setRecording(status.isRecording);
+      if (!status.isLive && user?.role !== 'admin') {
+        cleanupMediaStreams();
+        onLeave();
+      }
     });
 
     socket.on('control-update', ({ control, value, updatedStatus }) => {
