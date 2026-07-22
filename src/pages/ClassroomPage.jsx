@@ -290,6 +290,24 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     return pc;
   };
 
+  // Broadcast WebRTC SDP renegotiation when new video/audio tracks are toggled
+  const broadcastNewMediaStream = async (stream) => {
+    if (!stream) return;
+    for (const [targetSocketId, pc] of Object.entries(peerConnectionsRef.current)) {
+      try {
+        const senders = pc.getSenders();
+        senders.forEach((sender) => pc.removeSender(sender));
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socketRef.current?.emit('webrtc-offer', { targetSocketId, offer });
+      } catch (err) {
+        console.warn(`WebRTC renegotiation error with ${targetSocketId}:`, err);
+      }
+    }
+  };
+
   // Socket.IO & WebRTC Setup
   useEffect(() => {
     const SOCKET_SERVER_URL = window.location.hostname === 'localhost'
@@ -476,9 +494,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
         setCam(true);
         socketRef.current?.emit('toggle-media', { mic, cam: true, hand: handRaised });
 
-        Object.values(peerConnectionsRef.current).forEach(pc => {
-          mediaStream.getTracks().forEach(t => pc.addTrack(t, mediaStream));
-        });
+        await broadcastNewMediaStream(mediaStream);
       } catch (err) {
         console.error("Camera access denied or unavailable:", err);
         setCam(false);
@@ -511,9 +527,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           localStreamRef.current = audioStream;
           setLocalStream(audioStream);
         }
-        Object.values(peerConnectionsRef.current).forEach(pc => {
-          audioStream.getAudioTracks().forEach(t => pc.addTrack(t, audioStream));
-        });
+        await broadcastNewMediaStream(audioStream);
       } catch (e) {
         console.warn("Microphone access error:", e);
       }
@@ -544,9 +558,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           stopScreenSharing();
         };
 
-        Object.values(peerConnectionsRef.current).forEach(pc => {
-          displayStream.getTracks().forEach(t => pc.addTrack(t, displayStream));
-        });
+        await broadcastNewMediaStream(displayStream);
 
         socketRef.current?.emit('toggle-media', { mic, cam, hand: handRaised, sharing: true });
       } catch (err) {
@@ -570,7 +582,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
   const handleToggleHand = () => {
     const newHand = !handRaised;
     setHandRaised(newHand);
-    socketRef.current?.emit('toggle-media', { mic, cam, hand: newHand });
+    socketRef.current?.emit('toggle-media', { mic, cam: newHand });
 
     if (newHand && !isAdmin) {
       socketRef.current?.emit('request-mic');
