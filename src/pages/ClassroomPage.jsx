@@ -44,6 +44,13 @@ const AVATAR_COLORS = [
   "#B18AF0", "#E27D5F", "#5FA8E8", "#C9C15F", "#E56A6A",
 ];
 
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ],
+};
+
 function initials(name) {
   if (!name) return "U";
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -93,8 +100,9 @@ function StatusDot({ ok }) {
   );
 }
 
-function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStream }) {
-  const showVideo = p.cam && isSelf && localStream;
+function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStream, remoteStream }) {
+  const activeStream = isSelf ? localStream : remoteStream;
+  const showVideo = p.cam && activeStream;
 
   return (
     <div
@@ -107,19 +115,15 @@ function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStrea
       {showVideo ? (
         <video
           ref={(el) => {
-            if (el && el.srcObject !== localStream) {
-              el.srcObject = localStream;
+            if (el && el.srcObject !== activeStream) {
+              el.srcObject = activeStream;
             }
           }}
           autoPlay
           playsInline
-          muted
+          muted={isSelf}
           className="absolute inset-0 w-full h-full object-cover rounded-xl"
         />
-      ) : p.cam ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 text-zinc-400">
-          <Avatar name={p.name} color={p.color || '#6C6FEF'} size={compact ? 32 : 48} />
-        </div>
       ) : (
         <Avatar name={p.name} color={p.color || '#6C6FEF'} size={compact ? 32 : 48} />
       )}
@@ -187,6 +191,9 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
   // Real-time server & socket state
   const socketRef = useRef(null);
+  const peerConnectionsRef = useRef({});
+  const [remoteStreams, setRemoteStreams] = useState({});
+
   const [classStatus, setClassStatus] = useState({
     isLive: true,
     isRecording: false,
@@ -246,7 +253,44 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     return () => clearInterval(id);
   }, [recording]);
 
-  // Socket.IO Setup
+  // WebRTC Peer Connection Creator
+  const createPeerConnection = (targetSocketId) => {
+    if (peerConnectionsRef.current[targetSocketId]) {
+      return peerConnectionsRef.current[targetSocketId];
+    }
+
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+    peerConnectionsRef.current[targetSocketId] = pc;
+
+    const streamToSend = screenStreamRef.current || localStreamRef.current;
+    if (streamToSend) {
+      streamToSend.getTracks().forEach((track) => {
+        pc.addTrack(track, streamToSend);
+      });
+    }
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socketRef.current?.emit("webrtc-ice-candidate", {
+          targetSocketId,
+          candidate: event.candidate,
+        });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      if (event.streams && event.streams[0]) {
+        setRemoteStreams((prev) => ({
+          ...prev,
+          [targetSocketId]: event.streams[0],
+        }));
+      }
+    };
+
+    return pc;
+  };
+
+  // Socket.IO & WebRTC Setup
   useEffect(() => {
     const socket = io(window.location.origin, {
       transports: ['websocket', 'polling'],
@@ -258,6 +302,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
       name: user.name,
       role: user.role,
       color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+      roomId: activeRoomId,
     });
 
     socket.on('room-joined', (data) => {
@@ -268,6 +313,53 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
     socket.on('participant-list', (list) => {
       setParticipants(list);
+    });
+
+    socket.on('participant-joined', async (p) => {
+      if (p.socketId !== socket.id) {
+        try {
+          const pc = createPeerConnection(p.socketId);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit('webrtc-offer', { targetSocketId: p.socketId, offer });
+        } catch (e) {
+          console.warn("WebRTC offer creation error:", e);
+        }
+      }
+    });
+
+    socket.on('webrtc-offer', async ({ senderSocketId, offer }) => {
+      try {
+        const pc = createPeerConnection(senderSocketId);
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('webrtc-answer', { targetSocketId: senderSocketId, answer });
+      } catch (e) {
+        console.warn("WebRTC answer creation error:", e);
+      }
+    });
+
+    socket.on('webrtc-answer', async ({ senderSocketId, answer }) => {
+      try {
+        const pc = peerConnectionsRef.current[senderSocketId];
+        if (pc) {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+      } catch (e) {
+        console.warn("WebRTC setRemoteDescription answer error:", e);
+      }
+    });
+
+    socket.on('webrtc-ice-candidate', async ({ senderSocketId, candidate }) => {
+      try {
+        const pc = peerConnectionsRef.current[senderSocketId];
+        if (pc) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+      } catch (e) {
+        console.warn("WebRTC addIceCandidate error:", e);
+      }
     });
 
     socket.on('join-request-received', (reqData) => {
@@ -316,6 +408,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     return () => {
       socket.disconnect();
       cleanupMediaStreams();
+      Object.values(peerConnectionsRef.current).forEach(pc => pc.close());
     };
   }, [user]);
 
@@ -360,6 +453,11 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
         setLocalStream(mediaStream);
         setCam(true);
         socketRef.current?.emit('toggle-media', { mic, cam: true, hand: handRaised });
+
+        // Update WebRTC peers with new tracks
+        Object.values(peerConnectionsRef.current).forEach(pc => {
+          mediaStream.getTracks().forEach(t => pc.addTrack(t, mediaStream));
+        });
       } catch (err) {
         console.error("Camera access denied or unavailable:", err);
         alert("Camera could not be accessed. Please allow camera permissions in browser settings.");
@@ -391,6 +489,9 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           localStreamRef.current = audioStream;
           setLocalStream(audioStream);
         }
+        Object.values(peerConnectionsRef.current).forEach(pc => {
+          audioStream.getAudioTracks().forEach(t => pc.addTrack(t, audioStream));
+        });
       } catch (e) {
         console.warn("Microphone access error:", e);
       }
@@ -420,6 +521,11 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
         displayStream.getVideoTracks()[0].onended = () => {
           stopScreenSharing();
         };
+
+        // Send screen tracks to WebRTC peers
+        Object.values(peerConnectionsRef.current).forEach(pc => {
+          displayStream.getTracks().forEach(t => pc.addTrack(t, displayStream));
+        });
 
         socketRef.current?.emit('toggle-media', { mic, cam, hand: handRaised, sharing: true });
       } catch (err) {
@@ -557,8 +663,25 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Dynamic Host Participant info
+  const hostParticipant = participants.find((p) => p.role === 'admin');
+  const hostDisplayName = hostParticipant ? hostParticipant.name : (isAdmin ? user.name : 'Host Teacher');
+
   return (
     <div className={`w-full h-screen flex flex-col ${t.bg} ${t.text} font-sans overflow-hidden relative`}>
+      {/* Hidden Audio Elements for Remote WebRTC Audio Tracks (Audible Speakers) */}
+      {Object.entries(remoteStreams).map(([socketId, rStream]) => (
+        <audio
+          key={socketId}
+          autoPlay
+          ref={(el) => {
+            if (el && el.srcObject !== rStream) {
+              el.srcObject = rStream;
+            }
+          }}
+        />
+      ))}
+
       {/* Host Knock/Admission Approval Popup Overlay */}
       {isAdmin && joinRequests.length > 0 && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-500 text-zinc-950 font-semibold text-xs shadow-2xl backdrop-blur-md animate-bounce border-2 border-amber-300">
@@ -744,6 +867,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                       compact
                       isSelf={p.socketId === socketRef.current?.id}
                       localStream={localStream}
+                      remoteStream={remoteStreams[p.socketId]}
                       onRemove={isAdmin ? handleRemoveParticipant : null}
                     />
                   </div>
@@ -755,26 +879,27 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
               {/* Host spotlight card */}
               <div className={`relative w-full rounded-2xl border ${t.border} ${t.surfaceRaised} overflow-hidden shrink-0 bg-zinc-950`}
                 style={{ aspectRatio: "21/8" }}>
-                {cam && isAdmin && localStream ? (
+                {(cam && isAdmin && localStream) || (hostParticipant?.cam && remoteStreams[hostParticipant?.socketId]) ? (
                   <video
                     ref={(el) => {
-                      if (el && el.srcObject !== localStream) {
-                        el.srcObject = localStream;
+                      const streamToPlay = isAdmin ? localStream : remoteStreams[hostParticipant?.socketId];
+                      if (el && el.srcObject !== streamToPlay) {
+                        el.srcObject = streamToPlay;
                       }
                     }}
                     autoPlay
                     playsInline
-                    muted
+                    muted={isAdmin}
                     className="w-full h-full object-cover"
                   />
                 ) : (
                   <>
                     <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 30% 40%, ${AVATAR_COLORS[0]}22, transparent 60%)` }} />
                     <div className="absolute inset-0 flex items-center gap-4 px-8">
-                      <Avatar name={isAdmin ? user.name : "Dr. Amara Okafor"} color={AVATAR_COLORS[0]} size={72} ring />
+                      <Avatar name={hostDisplayName} color={AVATAR_COLORS[0]} size={72} ring />
                       <div>
                         <div className="font-semibold text-lg flex items-center gap-2">
-                          {isAdmin ? user.name : "Dr. Amara Okafor"}
+                          {hostDisplayName}
                           <ShieldCheck size={18} color={AMBER} />
                         </div>
                         <div className={`text-xs ${t.sub} flex items-center gap-1.5 mt-0.5`}>
@@ -803,6 +928,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                     t={t}
                     isSelf={p.socketId === socketRef.current?.id}
                     localStream={localStream}
+                    remoteStream={remoteStreams[p.socketId]}
                     onRemove={isAdmin ? handleRemoveParticipant : null}
                   />
                 ))}
