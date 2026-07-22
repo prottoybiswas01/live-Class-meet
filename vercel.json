@@ -1,26 +1,16 @@
 {
-  "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "https://YOUR_BACKEND_RENDER_URL/api/$1"
+      "source": "/api/:path*",
+      "destination": "https://live-class-meet.onrender.com/api/:path*"
     },
     {
-      "src": "/socket.io/(.*)",
-      "dest": "https://YOUR_BACKEND_RENDER_URL/socket.io/$1"
+      "source": "/socket.io/:path*",
+      "destination": "https://live-class-meet.onrender.com/socket.io/:path*"
     },
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
