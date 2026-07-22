@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server/src/index.js"
+    "start": "node server/src/index.js",
+    "push": "git add . && git commit -m \"Update live classroom application\" && git push origin main"
   },
   "dependencies": {
     "lucide-react": "^0.380.0",
