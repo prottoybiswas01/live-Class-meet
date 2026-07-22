@@ -1,11 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import AdminLogin from './pages/AdminLogin';
 import ClassroomPage from './pages/ClassroomPage';
 import StudentJoinModal from './components/StudentJoinModal';
 import ClassOffline from './components/ClassOffline';
 
+function StudentJoinWrapper() {
+  const { roomId } = useParams();
+  const roomName = roomId || 'class-session-1';
+  const [user, setUser] = useState(null);
+
+  const handleJoin = (fullName) => {
+    setUser({ name: fullName, role: 'student', roomId: roomName });
+  };
+
+  const handleLeave = () => {
+    setUser(null);
+  };
+
+  if (!user) {
+    return <StudentJoinModal roomId={roomName} onJoin={handleJoin} />;
+  }
+
+  return <ClassroomPage user={user} roomId={roomName} onLeave={handleLeave} />;
+}
+
 function MainClassroomWrapper() {
+  const { roomId } = useParams();
+  const targetRoom = roomId || 'class-session-1';
   const [classStatus, setClassStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -26,20 +48,19 @@ function MainClassroomWrapper() {
   };
 
   useEffect(() => {
-    // Check if stored credentials exist (Admin token)
     const adminToken = localStorage.getItem('adminToken');
     const role = localStorage.getItem('userRole');
     const name = localStorage.getItem('userName');
 
     if (adminToken && role === 'admin') {
-      setUser({ name: name || 'Admin Host', role: 'admin' });
+      setUser({ name: name || 'Admin Host', role: 'admin', roomId: targetRoom });
     }
 
     fetchStatus();
-  }, []);
+  }, [targetRoom]);
 
   const handleStudentJoin = (fullName) => {
-    const studentUser = { name: fullName, role: 'student' };
+    const studentUser = { name: fullName, role: 'student', roomId: targetRoom };
     setUser(studentUser);
   };
 
@@ -50,9 +71,8 @@ function MainClassroomWrapper() {
     localStorage.removeItem('userName');
   };
 
-  // Admin user always enters classroom directly to manage/start class
   if (user && user.role === 'admin') {
-    return <ClassroomPage user={user} onLeave={handleLeave} />;
+    return <ClassroomPage user={user} roomId={targetRoom} onLeave={handleLeave} />;
   }
 
   if (loading && !classStatus) {
@@ -66,18 +86,15 @@ function MainClassroomWrapper() {
     );
   }
 
-  // If class is offline, show offline screen to students
   if (!classStatus?.isLive) {
     return <ClassOffline onRefresh={fetchStatus} />;
   }
 
-  // If student hasn't entered full name yet, show join modal
   if (!user) {
-    return <StudentJoinModal onJoin={handleStudentJoin} />;
+    return <StudentJoinModal roomId={targetRoom} onJoin={handleStudentJoin} />;
   }
 
-  // Active student in live classroom
-  return <ClassroomPage user={user} onLeave={handleLeave} />;
+  return <ClassroomPage user={user} roomId={targetRoom} onLeave={handleLeave} />;
 }
 
 export default function App() {
@@ -86,9 +103,12 @@ export default function App() {
       <Routes>
         <Route path="/admin" element={<AdminLogin />} />
         <Route path="/admin-login" element={<AdminLogin />} />
+        <Route path="/join/:roomId" element={<StudentJoinWrapper />} />
+        <Route path="/join" element={<StudentJoinWrapper />} />
+        <Route path="/room/:roomId" element={<MainClassroomWrapper />} />
         <Route path="/class" element={<MainClassroomWrapper />} />
-        <Route path="/" element={<Navigate to="/class" replace />} />
-        <Route path="*" element={<Navigate to="/class" replace />} />
+        <Route path="/" element={<Navigate to="/join" replace />} />
+        <Route path="*" element={<Navigate to="/join" replace />} />
       </Routes>
     </BrowserRouter>
   );

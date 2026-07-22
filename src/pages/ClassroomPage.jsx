@@ -174,9 +174,10 @@ function ControlButton({ icon: Icon, active, danger, label, onClick, badge }) {
 /* ---------------------------------------------------------------
    Main Classroom Component
 ----------------------------------------------------------------*/
-export default function ClassroomPage({ user, onLeave }) {
+export default function ClassroomPage({ user, roomId, onLeave }) {
   const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
+  const activeRoomId = user?.roomId || roomId || 'class-session-1';
 
   // Theme states
   const [themeMode, setThemeMode] = useState("dark");
@@ -329,7 +330,7 @@ export default function ClassroomPage({ user, onLeave }) {
 
   // Copy Class Link for Students
   const handleCopyLink = () => {
-    const inviteUrl = window.location.origin + '/class';
+    const inviteUrl = `${window.location.origin}/join/${activeRoomId}`;
     navigator.clipboard.writeText(inviteUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
