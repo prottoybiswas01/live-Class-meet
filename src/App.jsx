@@ -45,10 +45,15 @@ function MainClassroomWrapper() {
 
   const handleLeave = () => {
     setUser(null);
-    if (localStorage.getItem('userRole') !== 'admin') {
-      localStorage.removeItem('userName');
-    }
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('userName');
   };
+
+  // Admin user always enters classroom directly to manage/start class
+  if (user && user.role === 'admin') {
+    return <ClassroomPage user={user} onLeave={handleLeave} />;
+  }
 
   if (loading && !classStatus) {
     return (
@@ -59,11 +64,6 @@ function MainClassroomWrapper() {
         </div>
       </div>
     );
-  }
-
-  // Admin user always enters classroom directly to manage/start class
-  if (user && user.role === 'admin') {
-    return <ClassroomPage user={user} onLeave={handleLeave} />;
   }
 
   // If class is offline, show offline screen to students

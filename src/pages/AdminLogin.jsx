@@ -14,11 +14,19 @@ const DARK = {
 const AMBER = "#E8A33D";
 
 export default function AdminLogin() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('adminpassword123');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    const token = localStorage.getItem('adminToken');
+    const role = localStorage.getItem('userRole');
+    if (token && role === 'admin') {
+      navigate('/class');
+    }
+  }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();

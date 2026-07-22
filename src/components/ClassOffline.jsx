@@ -1,5 +1,6 @@
 import React from 'react';
-import { Radio, RefreshCw } from 'lucide-react';
+import { Radio, RefreshCw, ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const DARK = {
   bg: "bg-[#0B0E14]",
@@ -13,6 +14,8 @@ const RED = "#E5484D";
 const AMBER = "#E8A33D";
 
 export default function ClassOffline({ onRefresh }) {
+  const navigate = useNavigate();
+
   return (
     <div className={`w-screen h-screen flex items-center justify-center ${DARK.bg} ${DARK.text} p-4`}>
       <div className={`w-full max-w-md ${DARK.surface} border ${DARK.border} rounded-2xl p-8 shadow-2xl text-center relative overflow-hidden`}>
@@ -31,6 +34,14 @@ export default function ClassOffline({ onRefresh }) {
             className="w-full py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border border-[#262C3A] hover:bg-white/5 transition-colors"
           >
             <RefreshCw size={16} /> Check Class Status
+          </button>
+
+          <button
+            onClick={() => navigate('/admin')}
+            className="w-full py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-md hover:brightness-110"
+            style={{ background: AMBER, color: '#141822' }}
+          >
+            <ShieldCheck size={18} /> Teacher / Host Login
           </button>
         </div>
       </div>

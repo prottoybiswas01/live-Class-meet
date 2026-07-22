@@ -71,6 +71,15 @@ export default function StudentJoinModal({ onJoin }) {
             Join Classroom
           </button>
         </form>
+
+        <div className="mt-5 text-center">
+          <a
+            href="/admin"
+            className={`text-xs ${DARK.sub} hover:text-[#E8A33D] hover:underline transition-colors`}
+          >
+            Are you the Host? Sign in as Teacher / Admin
+          </a>
+        </div>
       </div>
     </div>
   );
