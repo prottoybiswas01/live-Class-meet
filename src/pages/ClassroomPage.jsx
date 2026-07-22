@@ -44,14 +44,28 @@ const AVATAR_COLORS = [
   "#B18AF0", "#E27D5F", "#5FA8E8", "#C9C15F", "#E56A6A",
 ];
 
+// OpenRelay TURN + STUN Servers to bypass Carrier-Grade NAT (CGNAT) on Mobile 4G/5G Networks
 const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" },
-    { urls: "stun:stun3.l.google.com:19302" },
-    { urls: "stun:stun4.l.google.com:19302" },
-    { urls: "stun:global.stun.twilio.com:3478" },
+    { urls: "stun:openrelay.metered.ca:80" },
+    { urls: "stun:openrelay.metered.ca:443" },
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelay",
+      credential: "openrelay",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelay",
+      credential: "openrelay",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443?transport=tcp",
+      username: "openrelay",
+      credential: "openrelay",
+    },
   ],
 };
 
@@ -129,6 +143,7 @@ function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStrea
           autoPlay
           playsInline
           muted={isSelf}
+          onLoadedMetadata={(e) => e.target.play().catch(() => {})}
           className="absolute inset-0 w-full h-full object-cover rounded-xl bg-black"
         />
       ) : (
@@ -889,11 +904,21 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                   }}
                   autoPlay
                   playsInline
+                  muted={isAdmin}
+                  onLoadedMetadata={(e) => e.target.play().catch(() => {})}
                   className="w-full h-full object-contain bg-black"
                 />
 
+                {!presentationStream && !isAdmin && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950/90 text-white p-4 text-center">
+                    <div className="w-10 h-10 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs font-semibold text-amber-400">Connecting Live Screen Share Stream...</span>
+                    <span className="text-[11px] text-zinc-400 max-w-xs">Connecting via TURN Relay to bypass mobile NAT firewall.</span>
+                  </div>
+                )}
+
                 {/* Presenting Badge & Stop Button */}
-                <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white text-[11px] sm:text-xs">
+                <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white text-[11px] sm:text-xs z-10">
                   <MonitorUp size={14} color={AMBER} className="animate-pulse" />
                   <span className="font-medium truncate max-w-[120px] sm:max-w-none">
                     {isAdmin ? "You are sharing screen" : `${hostDisplayName}'s Screen Share`}
@@ -969,6 +994,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                     autoPlay
                     playsInline
                     muted={isAdmin}
+                    onLoadedMetadata={(e) => e.target.play().catch(() => {})}
                     className="w-full h-full object-cover bg-black"
                   />
                 ) : (
