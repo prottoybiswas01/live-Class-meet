@@ -48,6 +48,10 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:global.stun.twilio.com:3478" },
   ],
 };
 
@@ -115,14 +119,17 @@ function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStrea
       {showVideo ? (
         <video
           ref={(el) => {
-            if (el && el.srcObject !== activeStream) {
-              el.srcObject = activeStream;
+            if (el) {
+              if (el.srcObject !== activeStream) {
+                el.srcObject = activeStream;
+              }
+              el.play().catch(() => {});
             }
           }}
           autoPlay
           playsInline
           muted={isSelf}
-          className="absolute inset-0 w-full h-full object-cover rounded-xl"
+          className="absolute inset-0 w-full h-full object-cover rounded-xl bg-black"
         />
       ) : (
         <Avatar name={p.name} color={p.color || '#6C6FEF'} size={compact ? 32 : 48} />
@@ -290,12 +297,21 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     };
 
     pc.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
-        setRemoteStreams((prev) => ({
-          ...prev,
-          [targetSocketId]: event.streams[0],
-        }));
-      }
+      const incomingStream = (event.streams && event.streams[0])
+        ? event.streams[0]
+        : new MediaStream([event.track]);
+
+      setRemoteStreams((prev) => {
+        const existing = prev[targetSocketId];
+        if (existing) {
+          const hasTrack = existing.getTracks().some((t) => t.id === event.track.id);
+          if (!hasTrack) {
+            existing.addTrack(event.track);
+          }
+          return { ...prev, [targetSocketId]: new MediaStream(existing.getTracks()) };
+        }
+        return { ...prev, [targetSocketId]: incomingStream };
+      });
     };
 
     return pc;
@@ -506,7 +522,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     if (!cam) {
       try {
         const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: mic,
         });
         localStreamRef.current = mediaStream;
@@ -566,7 +582,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     if (!sharing) {
       try {
         const displayStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { cursor: "always" },
+          video: { cursor: "always", displaySurface: "monitor" },
           audio: true,
         });
 
@@ -604,7 +620,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
   const handleToggleHand = () => {
     const newHand = !handRaised;
     setHandRaised(newHand);
-    socketRef.current?.emit('toggle-media', { mic, cam: newHand });
+    socketRef.current?.emit('toggle-media', { mic, cam, hand: newHand });
 
     if (newHand && !isAdmin) {
       socketRef.current?.emit('request-mic');
@@ -723,8 +739,9 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
   const hostParticipant = participants.find((p) => p.role === 'admin');
   const hostDisplayName = hostParticipant ? hostParticipant.name : (isAdmin ? user.name : 'Teacher / Host');
 
-  // Stream to display on screen share stage (local if host, or remote if student)
-  const presentationStream = sharing && isAdmin ? screenStream : (hostParticipant ? remoteStreams[hostParticipant.socketId] : null);
+  // Stream to display on screen share stage (local screen if host, or remote host stream if student)
+  const hostRemoteStream = hostParticipant ? remoteStreams[hostParticipant.socketId] : Object.values(remoteStreams)[0];
+  const presentationStream = sharing && isAdmin ? screenStream : hostRemoteStream;
 
   return (
     <div className={`w-full h-screen flex flex-col ${t.bg} ${t.text} font-sans overflow-hidden relative`}>
@@ -734,8 +751,11 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           key={socketId}
           autoPlay
           ref={(el) => {
-            if (el && el.srcObject !== rStream) {
-              el.srcObject = rStream;
+            if (el) {
+              if (el.srcObject !== rStream) {
+                el.srcObject = rStream;
+              }
+              el.play().catch(() => {});
             }
           }}
         />
@@ -860,8 +880,11 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
               <div className={`relative flex-1 rounded-2xl border ${t.border} overflow-hidden bg-black flex items-center justify-center min-h-[220px]`}>
                 <video
                   ref={(el) => {
-                    if (el && el.srcObject !== presentationStream) {
-                      el.srcObject = presentationStream;
+                    if (el) {
+                      if (el.srcObject !== presentationStream) {
+                        el.srcObject = presentationStream;
+                      }
+                      el.play().catch(() => {});
                     }
                   }}
                   autoPlay
@@ -891,14 +914,17 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                     style={{ borderColor: AMBER, aspectRatio: "16/9" }}>
                     <video
                       ref={(el) => {
-                        if (el && el.srcObject !== localStream) {
-                          el.srcObject = localStream;
+                        if (el) {
+                          if (el.srcObject !== localStream) {
+                            el.srcObject = localStream;
+                          }
+                          el.play().catch(() => {});
                         }
                       }}
                       autoPlay
                       playsInline
                       muted
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover bg-black"
                     />
                     <span className="absolute bottom-1 left-1 text-[9px] sm:text-[10px] font-medium px-1 py-0.5 rounded bg-black/60 text-white truncate max-w-[90%]">
                       {user.name} (You)
@@ -933,14 +959,17 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                   <video
                     ref={(el) => {
                       const streamToPlay = isAdmin ? localStream : remoteStreams[hostParticipant?.socketId];
-                      if (el && el.srcObject !== streamToPlay) {
-                        el.srcObject = streamToPlay;
+                      if (el) {
+                        if (el.srcObject !== streamToPlay) {
+                          el.srcObject = streamToPlay;
+                        }
+                        el.play().catch(() => {});
                       }
                     }}
                     autoPlay
                     playsInline
                     muted={isAdmin}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover bg-black"
                   />
                 ) : (
                   <>
