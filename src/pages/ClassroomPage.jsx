@@ -44,11 +44,14 @@ const AVATAR_COLORS = [
   "#B18AF0", "#E27D5F", "#5FA8E8", "#C9C15F", "#E56A6A",
 ];
 
-// OpenRelay TURN + STUN Servers to bypass Carrier-Grade NAT (CGNAT) on Mobile 4G/5G Networks
 const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:global.stun.twilio.com:3478" },
     { urls: "stun:openrelay.metered.ca:80" },
     { urls: "stun:openrelay.metered.ca:443" },
     {
@@ -143,7 +146,6 @@ function ParticipantCard({ p, t, speaking, compact, onRemove, isSelf, localStrea
           autoPlay
           playsInline
           muted={isSelf}
-          onLoadedMetadata={(e) => e.target.play().catch(() => {})}
           className="absolute inset-0 w-full h-full object-cover rounded-xl bg-black"
         />
       ) : (
@@ -286,6 +288,18 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isAdmin]);
 
+  // Combined Active Stream (Screen Video + Local Audio if Screen Share, or Local Stream)
+  const getActiveStream = () => {
+    if (sharing && screenStreamRef.current) {
+      const tracks = [screenStreamRef.current.getVideoTracks()[0]];
+      if (localStreamRef.current && localStreamRef.current.getAudioTracks().length > 0) {
+        tracks.push(localStreamRef.current.getAudioTracks()[0]);
+      }
+      return new MediaStream(tracks);
+    }
+    return localStreamRef.current;
+  };
+
   // WebRTC Peer Connection Creator
   const createPeerConnection = (targetSocketId) => {
     if (peerConnectionsRef.current[targetSocketId]) {
@@ -295,7 +309,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peerConnectionsRef.current[targetSocketId] = pc;
 
-    const streamToSend = screenStreamRef.current || localStreamRef.current;
+    const streamToSend = getActiveStream();
     if (streamToSend) {
       streamToSend.getTracks().forEach((track) => {
         pc.addTrack(track, streamToSend);
@@ -609,7 +623,8 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
           stopScreenSharing();
         };
 
-        await broadcastNewMediaStream(displayStream);
+        const activeStr = getActiveStream();
+        await broadcastNewMediaStream(activeStr);
 
         socketRef.current?.emit('screen-share-state', { isSharing: true });
         socketRef.current?.emit('toggle-media', { mic, cam, hand: handRaised, sharing: true });
@@ -630,6 +645,10 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     setSharing(false);
     socketRef.current?.emit('screen-share-state', { isSharing: false });
     socketRef.current?.emit('toggle-media', { mic, cam, hand: handRaised, sharing: false });
+
+    if (localStreamRef.current) {
+      broadcastNewMediaStream(localStreamRef.current);
+    }
   };
 
   const handleToggleHand = () => {
@@ -908,14 +927,6 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                   onLoadedMetadata={(e) => e.target.play().catch(() => {})}
                   className="w-full h-full object-contain bg-black"
                 />
-
-                {!presentationStream && !isAdmin && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950/90 text-white p-4 text-center">
-                    <div className="w-10 h-10 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-xs font-semibold text-amber-400">Connecting Live Screen Share Stream...</span>
-                    <span className="text-[11px] text-zinc-400 max-w-xs">Connecting via TURN Relay to bypass mobile NAT firewall.</span>
-                  </div>
-                )}
 
                 {/* Presenting Badge & Stop Button */}
                 <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white text-[11px] sm:text-xs z-10">
