@@ -80,6 +80,13 @@ export const registerParticipantHandlers = (io, socket) => {
     }
   });
 
+  socket.on('screen-share-state', ({ isSharing }) => {
+    io.to('live-class-room').emit('screen-share-broadcast', {
+      isSharing,
+      hostSocketId: socket.id,
+    });
+  });
+
   socket.on('request-mic', () => {
     classStateService.requestMic(socket.id);
     const p = classStateService.getParticipantBySocket(socket.id);

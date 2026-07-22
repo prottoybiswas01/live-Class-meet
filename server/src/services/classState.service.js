@@ -81,6 +81,13 @@ class ClassStateService {
     const joinTime = new Date();
     const id = uuidv4();
 
+    // Prevent duplicate entries for reconnected users
+    for (const [existingSocketId, p] of this.participants.entries()) {
+      if (p.name.toLowerCase() === name.toLowerCase() || existingSocketId === socketId) {
+        this.participants.delete(existingSocketId);
+      }
+    }
+
     const participant = {
       id,
       socketId,

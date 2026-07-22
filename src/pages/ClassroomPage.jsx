@@ -161,7 +161,7 @@ function ControlButton({ icon: Icon, active, danger, label, onClick, badge }) {
       onClick={onClick}
       title={label}
       className={`relative w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all duration-200 shrink-0
-        ${danger ? "bg-[#E5484D] hover:bg-[#d13d42]" : active ? "text-white" : "bg-white/5 hover:bg-white/10 text-[#EEF0F4]"}
+        ${danger ? "bg-[#E5484D] hover:bg-[#d13d42]" : active ? "text-white" : "bg-white/10 hover:bg-white/20 text-[#EEF0F4]"}
       `}
       style={active && !danger ? { background: AMBER, color: "#141822" } : undefined}
     >
@@ -335,6 +335,12 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
     socket.on('participant-list', (list) => {
       setParticipants(list);
+    });
+
+    socket.on('screen-share-broadcast', ({ isSharing, hostSocketId }) => {
+      if (!isAdmin) {
+        setSharing(isSharing);
+      }
     });
 
     socket.on('participant-joined', async (p) => {
@@ -560,6 +566,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
         await broadcastNewMediaStream(displayStream);
 
+        socketRef.current?.emit('screen-share-state', { isSharing: true });
         socketRef.current?.emit('toggle-media', { mic, cam, hand: handRaised, sharing: true });
       } catch (err) {
         console.error("Screen sharing error:", err);
@@ -576,6 +583,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
     }
     setScreenStream(null);
     setSharing(false);
+    socketRef.current?.emit('screen-share-state', { isSharing: false });
     socketRef.current?.emit('toggle-media', { mic, cam, hand: handRaised, sharing: false });
   };
 
@@ -699,6 +707,9 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
   // Dynamic Host Participant info
   const hostParticipant = participants.find((p) => p.role === 'admin');
   const hostDisplayName = hostParticipant ? hostParticipant.name : (isAdmin ? user.name : 'Teacher / Host');
+
+  // Stream to display on screen share stage (local if host, or remote if student)
+  const presentationStream = sharing && isAdmin ? screenStream : (hostParticipant ? remoteStreams[hostParticipant.socketId] : null);
 
   return (
     <div className={`w-full h-screen flex flex-col ${t.bg} ${t.text} font-sans overflow-hidden relative`}>
@@ -826,16 +837,16 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
       </header>
 
       {/* Main Body */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden relative pb-20 sm:pb-24">
         <main className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4">
           {sharing ? (
             <div className="flex-1 flex flex-col lg:flex-row gap-3 sm:gap-4 overflow-hidden">
               {/* Screen share Google Meet presentation stage */}
-              <div className={`relative flex-1 rounded-2xl border ${t.border} overflow-hidden bg-black flex items-center justify-center min-h-[200px]`}>
+              <div className={`relative flex-1 rounded-2xl border ${t.border} overflow-hidden bg-black flex items-center justify-center min-h-[220px]`}>
                 <video
                   ref={(el) => {
-                    if (el && el.srcObject !== screenStream) {
-                      el.srcObject = screenStream;
+                    if (el && el.srcObject !== presentationStream) {
+                      el.srcObject = presentationStream;
                     }
                   }}
                   autoPlay
@@ -846,7 +857,9 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                 {/* Presenting Badge & Stop Button */}
                 <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white text-[11px] sm:text-xs">
                   <MonitorUp size={14} color={AMBER} className="animate-pulse" />
-                  <span className="font-medium truncate max-w-[120px] sm:max-w-none">Screen Sharing Active</span>
+                  <span className="font-medium truncate max-w-[120px] sm:max-w-none">
+                    {isAdmin ? "You are sharing screen" : `${hostDisplayName}'s Screen Share`}
+                  </span>
                   {isAdmin && (
                     <button
                       onClick={stopScreenSharing}
@@ -897,9 +910,9 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col gap-3 sm:gap-4 overflow-y-auto pb-16">
+            <div className="flex-1 flex flex-col gap-3 sm:gap-4 overflow-y-auto pb-4">
               {/* Host spotlight card */}
-              <div className={`relative w-full rounded-2xl border ${t.border} ${t.surfaceRaised} overflow-hidden shrink-0 bg-zinc-950 min-h-[160px] sm:min-h-[220px]`}
+              <div className={`relative w-full rounded-2xl border ${t.border} ${t.surfaceRaised} overflow-hidden shrink-0 bg-zinc-950 min-h-[180px] sm:min-h-[240px]`}
                 style={{ aspectRatio: "16/9" }}>
                 {(cam && isAdmin && localStream) || (hostParticipant?.cam && remoteStreams[hostParticipant?.socketId]) ? (
                   <video
@@ -925,7 +938,7 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
                           <ShieldCheck size={18} color={AMBER} className="shrink-0" />
                         </div>
                         <div className={`text-[11px] sm:text-xs ${t.sub} flex items-center gap-1 mt-0.5`}>
-                          <Pin size={11} className="shrink-0" /> Host · Main Classroom Stage
+                          <Pin size={11} className="shrink-0" /> Host Teacher · Main Stage
                         </div>
                       </div>
                     </div>
@@ -1113,10 +1126,10 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
         </aside>
       </div>
 
-      {/* Floating Mobile Responsive Control Bar */}
-      <div className="absolute bottom-3 sm:bottom-5 left-1/2 -translate-x-1/2 z-30 max-w-[96vw] overflow-x-auto">
-        <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-full border ${t.border} shadow-2xl shrink-0`}
-          style={{ background: isDark ? "rgba(20,24,34,0.92)" : "rgba(255,255,255,0.92)", backdropFilter: "blur(16px)" }}>
+      {/* Floating Mobile Fixed Responsive Control Bar */}
+      <div className="fixed bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-[98vw] overflow-x-auto">
+        <div className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full border ${t.border} shadow-2xl shrink-0`}
+          style={{ background: isDark ? "rgba(20,24,34,0.95)" : "rgba(255,255,255,0.95)", backdropFilter: "blur(16px)", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}>
           <ControlButton icon={mic ? Mic : MicOff} active={mic} label="Microphone" onClick={handleToggleMic} />
           <ControlButton icon={cam ? Video : VideoOff} active={cam} label="Camera" onClick={handleToggleCam} />
           {isAdmin && <ControlButton icon={sharing ? ScreenShareOff : ScreenShare} active={sharing} label="Share screen" onClick={handleToggleScreenShare} />}
