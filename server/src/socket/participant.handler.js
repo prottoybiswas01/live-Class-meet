@@ -1,14 +1,13 @@
 import classStateService from '../services/classState.service.js';
 
 export const registerParticipantHandlers = (io, socket) => {
-  socket.on('request-join', ({ name, role = 'student', color }) => {
-    const status = classStateService.getClassStatus();
-    if (!status.isLive && role !== 'admin') {
-      socket.emit('error-message', { message: 'Class is currently offline.' });
-      return;
-    }
+  // Always join the global classroom socket room
+  socket.join('live-class-room');
 
+  socket.on('request-join', ({ name, role = 'student', color }) => {
+    // If Host joins, automatically mark class as live
     if (role === 'admin') {
+      classStateService.startClass();
       const participant = classStateService.addParticipant(socket.id, name, role, color);
       socket.emit('room-joined', {
         self: participant,
@@ -16,22 +15,27 @@ export const registerParticipantHandlers = (io, socket) => {
         participants: classStateService.getAllParticipants(),
         messages: classStateService.getChatHistory(),
       });
-      io.emit('participant-list', classStateService.getAllParticipants());
-    } else {
-      // Broadcast knock admission request to all sockets so active Host/Teacher receives it reliably
-      io.emit('join-request-received', {
-        socketId: socket.id,
-        name,
-        role,
-        color,
-      });
-
-      socket.emit('waiting-for-approval', { message: 'Waiting for host to admit you to the class...' });
+      io.to('live-class-room').emit('participant-list', classStateService.getAllParticipants());
+      io.to('live-class-room').emit('class-status-change', classStateService.getClassStatus());
+      return;
     }
+
+    // Always broadcast student knock admission request to Host
+    io.to('live-class-room').emit('join-request-received', {
+      socketId: socket.id,
+      name,
+      role: 'student',
+      color: color || '#6C6FEF',
+    });
+
+    socket.emit('waiting-for-approval', { message: 'Waiting for host to admit you to the class...' });
   });
 
   socket.on('approve-join', ({ socketId, approved, name, color }) => {
     if (approved) {
+      // Auto start class if host admits student
+      classStateService.startClass();
+
       const participant = classStateService.addParticipant(socketId, name || 'Student', 'student', color || '#6C6FEF');
       io.to(socketId).emit('room-joined', {
         self: participant,
@@ -39,24 +43,22 @@ export const registerParticipantHandlers = (io, socket) => {
         participants: classStateService.getAllParticipants(),
         messages: classStateService.getChatHistory(),
       });
-      io.emit('participant-joined', participant);
-      io.emit('participant-list', classStateService.getAllParticipants());
+      io.to('live-class-room').emit('participant-joined', participant);
+      io.to('live-class-room').emit('participant-list', classStateService.getAllParticipants());
     } else {
       io.to(socketId).emit('join-denied', { message: 'The host has denied your request to join the class.' });
     }
   });
 
   socket.on('join-room', ({ name, role = 'student', color }) => {
-    const status = classStateService.getClassStatus();
-    if (!status.isLive && role !== 'admin') {
-      socket.emit('error-message', { message: 'Class is currently offline.' });
-      return;
+    if (role === 'admin') {
+      classStateService.startClass();
     }
 
     const participant = classStateService.addParticipant(socket.id, name, role, color);
 
     // Notify other peers in room of new participant
-    socket.broadcast.emit('participant-joined', participant);
+    socket.broadcast.to('live-class-room').emit('participant-joined', participant);
 
     // Send current state, participant list, and chat history to the newly joined user
     socket.emit('room-joined', {
@@ -67,20 +69,20 @@ export const registerParticipantHandlers = (io, socket) => {
     });
 
     // Broadcast updated participant list
-    io.emit('participant-list', classStateService.getAllParticipants());
+    io.to('live-class-room').emit('participant-list', classStateService.getAllParticipants());
   });
 
   socket.on('toggle-media', ({ mic, cam, hand }) => {
     const updated = classStateService.updateMediaStatus(socket.id, { mic, cam, hand });
     if (updated) {
-      io.emit('participant-updated', updated);
-      io.emit('participant-list', classStateService.getAllParticipants());
+      io.to('live-class-room').emit('participant-updated', updated);
+      io.to('live-class-room').emit('participant-list', classStateService.getAllParticipants());
     }
   });
 
   socket.on('request-mic', () => {
     classStateService.requestMic(socket.id);
     const p = classStateService.getParticipantBySocket(socket.id);
-    io.emit('mic-request-received', { socketId: socket.id, name: p ? p.name : 'Student' });
+    io.to('live-class-room').emit('mic-request-received', { socketId: socket.id, name: p ? p.name : 'Student' });
   });
 };

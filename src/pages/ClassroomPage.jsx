@@ -292,7 +292,11 @@ export default function ClassroomPage({ user, roomId, onLeave }) {
 
   // Socket.IO & WebRTC Setup
   useEffect(() => {
-    const socket = io(window.location.origin, {
+    const SOCKET_SERVER_URL = window.location.hostname === 'localhost'
+      ? 'http://localhost:5000'
+      : 'https://live-class-meet.onrender.com';
+
+    const socket = io(SOCKET_SERVER_URL, {
       transports: ['websocket', 'polling'],
     });
     socketRef.current = socket;

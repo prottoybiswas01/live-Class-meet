@@ -3,10 +3,10 @@ import { serverLogger } from '../config/winston.js';
 
 class ClassStateService {
   constructor() {
-    this.isLive = false;
+    this.isLive = true; // Default to live session active
     this.isRecording = false;
     this.recStartTime = null;
-    this.classStartTime = null;
+    this.classStartTime = new Date();
 
     // Controls
     this.screenShareAllowed = true;

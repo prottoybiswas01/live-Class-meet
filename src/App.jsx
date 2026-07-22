@@ -7,6 +7,10 @@ import ClassroomPage from './pages/ClassroomPage';
 import StudentJoinModal from './components/StudentJoinModal';
 import ClassOffline from './components/ClassOffline';
 
+const SOCKET_SERVER_URL = window.location.hostname === 'localhost'
+  ? 'http://localhost:5000'
+  : 'https://live-class-meet.onrender.com';
+
 function StudentJoinWrapper() {
   const { roomId } = useParams();
   const roomName = roomId || 'class-session-1';
@@ -23,7 +27,7 @@ function StudentJoinWrapper() {
     setIsKnocking(true);
     setDenied(false);
 
-    const socket = io(window.location.origin, {
+    const socket = io(SOCKET_SERVER_URL, {
       transports: ['websocket', 'polling'],
     });
     socketRef.current = socket;
